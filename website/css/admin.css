@@ -1,0 +1,14 @@
+/* ============================================================
+ * TeleMAX Web — admin.css
+ * Admin Mode: строки статистики, онлайн-список, теги.
+ * ============================================================ */
+.ad-stat { display: flex; flex-direction: column; gap: 2px; }
+.ad-line {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 14px;
+}
+.ad-line:last-child { border-bottom: none; }
+.ad-line span { color: var(--gray-light); }
+.ad-line b { color: var(--accent); text-align: right; }
+.ad-online { font-size: 13.5px; color: var(--gray-light); line-height: 1.7; margin-top: 6px; }
+.admin-panel-title { font-size: 28px; font-weight: 800; }

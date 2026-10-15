@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.telemax.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.telemax.app'
+        minSdk 24
+        targetSdk 34
+        versionCode 51
+        versionName '0.5.1'
+        buildConfigField 'String', 'TELEMAX_SERVER_URL', '"' + (project.findProperty('telemaxServerUrl') ?: 'ws://YOUR_PUBLIC_SERVER_IP:8080') + '"'
+        buildConfigField 'String', 'TELEMAX_ADMIN_KEY', '"' + (project.findProperty('telemaxAdminKey') ?: 'CHANGE_ME_TO_A_LONG_RANDOM_SECRET') + '"'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.infobip:google-webrtc:1.0.45036'
+    implementation 'com.google.android.gms:play-services-auth:21.6.0'
+}

@@ -1,0 +1,9 @@
+<resources>
+    <color name="tele_yellow">#FFCC00</color>
+    <color name="tele_yellow_dark">#E6B800</color>
+    <color name="tele_black">#0A0A0A</color>
+    <color name="tele_surface">#151515</color>
+    <color name="tele_surface_2">#202020</color>
+    <color name="tele_white">#FFFFFF</color>
+    <color name="tele_gray">#A9A9A9</color>
+</resources>

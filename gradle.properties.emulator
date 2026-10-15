@@ -1,0 +1,8 @@
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.nonTransitiveRClass=false
+
+# Настройки для Android эмулятора
+# Скопируйте содержимое этого файла в gradle.properties для использования с эмулятором
+telemaxServerUrl=ws://10.0.2.2:8080
+telemaxAdminKey=testtestest654

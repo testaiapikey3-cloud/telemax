@@ -1,0 +1,215 @@
+/* ============================================================
+ * TeleMAX Web — base.css
+ * Палитра (как в Android-версии): жёлтый #ffc107 на глубоком чёрном.
+ * Ресет, кнопки, формы, модалки, шторки, тосты, аватары, иконки.
+ * ============================================================ */
+:root {
+  --accent: #ffc107;
+  --accent-dark: #ffb300;
+  --black: #0a0a0c;
+  --surface: #161619;
+  --surface2: #202024;
+  --surface3: #2a2a30;
+  --white: #f5f5f7;
+  --gray: #8e8e93;
+  --gray-light: #b8b8bd;
+  --verify: #2563eb;
+  --red: #ff453a;
+  --green: #34c759;
+  --border: rgba(255, 255, 255, .07);
+  --radius: 16px;
+  --radius-sm: 12px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  background: #050506;
+  color: var(--white);
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+body.no-anim *, body.no-anim *::before, body.no-anim *::after { transition: none !important; animation: none !important; }
+a { color: var(--accent); text-decoration: none; }
+.dim { color: var(--gray); font-size: 13px; }
+.pad { padding: 14px; }
+.center { text-align: center; }
+
+/* ---------- скроллбар ---------- */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- иконки ---------- */
+.ic { display: inline-flex; width: 22px; height: 22px; flex: 0 0 auto; align-items: center; justify-content: center; }
+.ic svg { width: 100%; height: 100%; display: block; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; border-radius: 50%;
+  background: transparent; border: none; color: var(--white);
+  cursor: pointer; flex: 0 0 auto; transition: background .15s;
+}
+.icon-btn:hover { background: rgba(255,255,255,.07); }
+.icon-btn .ic { width: 21px; height: 21px; }
+.icon-btn.off { color: var(--red); }
+
+/* ---------- кнопки ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 18px; border-radius: 14px; border: none; cursor: pointer;
+  font-size: 15px; font-weight: 600; font-family: inherit;
+  background: var(--surface2); color: var(--white);
+  transition: transform .1s, filter .15s, background .15s;
+}
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); color: #000; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ghost { background: var(--surface2); color: var(--white); }
+.btn-ghost:hover { background: var(--surface3); }
+.btn-dark { background: var(--surface); color: var(--white); border: 1px solid var(--border); }
+.btn-danger { background: rgba(255,69,58,.15); color: var(--red); }
+.btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 11px; }
+.btn-big { width: 100%; padding: 15px; border-radius: 16px; font-size: 16px; margin-top: 10px; }
+
+/* ---------- формы ---------- */
+.form { display: flex; flex-direction: column; gap: 12px; }
+.form-label { display: block; font-size: 13px; color: var(--gray); margin: 10px 2px 6px; }
+.form-input {
+  width: 100%; padding: 13px 14px; border-radius: var(--radius-sm);
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--white); font-size: 15px; font-family: inherit; outline: none;
+  transition: border-color .15s; resize: vertical;
+}
+.form-input:focus { border-color: var(--accent); }
+.form-hint { font-size: 12px; color: var(--gray); margin-top: 4px; }
+.form-row { display: flex; flex-direction: column; }
+
+/* ---------- аватары ---------- */
+.avatar {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; border-radius: 50%; flex: 0 0 auto;
+  background-size: cover; background-position: center;
+  color: #000; font-weight: 700; font-size: 18px;
+}
+.avatar b { pointer-events: none; }
+.avatar.av-sm { width: 40px; height: 40px; font-size: 15px; }
+.avatar.av-md { width: 52px; height: 52px; font-size: 19px; }
+.avatar.av-lg { width: 62px; height: 62px; font-size: 24px; }
+.avatar.av-xl { width: 108px; height: 108px; font-size: 40px; border-radius: 50%; }
+.avatar .on-dot {
+  position: absolute; right: 1px; bottom: 1px; width: 12px; height: 12px;
+  background: var(--green); border: 2.5px solid var(--surface); border-radius: 50%;
+}
+.vbadge { color: var(--verify); display: inline-flex; width: 17px; height: 17px; margin-left: 4px; vertical-align: -3px; }
+.vbadge .ic { width: 17px; height: 17px; }
+
+/* ---------- модалки ---------- */
+.modal-back {
+  position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(6px);
+  opacity: 0; transition: opacity .2s; padding: 18px;
+}
+.modal-back.show { opacity: 1; }
+.modal {
+  width: 100%; max-width: 400px; max-height: 86vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 20px;
+  transform: translateY(14px) scale(.97); transition: transform .22s;
+}
+.modal-back.show .modal { transform: none; }
+.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.modal-text { color: var(--gray-light); font-size: 14px; margin-bottom: 12px; white-space: pre-line; }
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.modal-actions .btn { flex: 1; }
+
+/* ---------- шторка ---------- */
+.sheet-back {
+  position: fixed; inset: 0; z-index: 95; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(0,0,0,.55); opacity: 0; transition: opacity .2s;
+}
+.sheet-back.show { opacity: 1; }
+.sheet {
+  width: 100%; max-width: 520px; background: var(--surface);
+  border-radius: 22px 22px 0 0; padding: 10px 10px 18px;
+  max-height: 78vh; overflow-y: auto;
+  transform: translateY(30px); transition: transform .22s;
+}
+.sheet-back.show .sheet { transform: none; }
+.sheet-title { padding: 14px 16px 10px; font-size: 16px; font-weight: 700; color: var(--gray-light); }
+.sheet-header { padding: 12px 16px 4px; font-size: 12px; color: var(--gray); text-transform: uppercase; letter-spacing: .04em; }
+.sheet-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border-radius: 14px; cursor: pointer;
+  font-size: 15px; transition: background .15s;
+}
+.sheet-item:hover { background: var(--surface2); }
+.sheet-item .ic { color: var(--gray-light); }
+.sheet-item.danger, .sheet-item.danger .ic { color: var(--red); }
+.sheet-item.active .sheet-label { color: var(--accent); }
+.sheet-item.active .ic { color: var(--accent); }
+.sheet-label { flex: 1; }
+.sheet-sub { font-size: 12px; color: var(--gray); }
+.sheet-cancel { justify-content: center; color: var(--gray-light); font-weight: 600; }
+
+/* ---------- тосты ---------- */
+#toasts {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none; width: min(92vw, 460px);
+}
+.toast {
+  background: rgba(32,32,36,.96); border: 1px solid var(--border);
+  color: var(--white); padding: 11px 16px; border-radius: 14px;
+  font-size: 14px; max-width: 100%;
+  opacity: 0; transform: translateY(-8px); transition: all .25s;
+  box-shadow: 0 8px 28px rgba(0,0,0,.5);
+}
+.toast.show { opacity: 1; transform: none; }
+.toast.err { border-color: rgba(255,69,58,.5); }
+.toast.warn { border-color: rgba(255,193,7,.5); }
+.toast.info { border-color: rgba(37,99,235,.5); }
+
+/* ---------- прогресс загрузки ---------- */
+.upload-toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
+  z-index: 150; width: min(88vw, 380px);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 12px 16px; opacity: 0; transition: all .25s;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.upload-toast.show { opacity: 1; transform: translateX(-50%); }
+.ut-name { font-size: 13px; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ut-bar { height: 5px; background: var(--surface3); border-radius: 4px; overflow: hidden; }
+.ut-bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 4px; transition: width .2s; }
+.ut-pct { font-size: 12px; color: var(--gray); margin-top: 6px; text-align: right; }
+
+/* ---------- чипы ---------- */
+.chip {
+  padding: 8px 15px; border-radius: 20px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--gray-light); font-size: 13.5px;
+  cursor: pointer; white-space: nowrap; font-family: inherit; font-weight: 600;
+  transition: all .15s;
+}
+.chip.active { background: var(--accent); color: #000; border-color: transparent; }
+.chip:hover:not(.active) { background: var(--surface2); }
+
+/* ---------- общие списки ---------- */
+.ct-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ct-main b { font-weight: 600; font-size: 15px; display: flex; align-items: center; overflow: hidden; }
+.ct-main span { font-size: 13px; color: var(--gray); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 60px 20px; color: var(--gray); text-align: center; }
+.empty .empty-ic { width: 58px; height: 58px; color: var(--surface3); }
+.empty .empty-ic svg { width: 100%; height: 100%; }
+.empty.small { padding: 30px 20px; }
+
+.role-mini { font-size: 10.5px; color: var(--accent); background: rgba(255,193,7,.12); padding: 2px 8px; border-radius: 8px; margin-left: 6px; white-space: nowrap; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 8px; margin-left: 6px; }
+.tag.red { color: var(--red); background: rgba(255,69,58,.12); }
+.tag.blue { color: var(--verify); background: rgba(37,99,235,.14); }
+
+@media (max-width: 540px) {
+  .modal-back { align-items: flex-end; padding: 0; }
+  .modal { max-width: 100%; border-radius: 22px 22px 0 0; }
+}

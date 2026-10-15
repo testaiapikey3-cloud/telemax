@@ -1,0 +1,8 @@
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.nonTransitiveRClass=false
+
+# Настройки для реального Android устройства в локальной сети
+# Скопируйте содержимое этого файла в gradle.properties для использования с реальным устройством
+telemaxServerUrl=ws://192.168.0.110:8080
+telemaxAdminKey=testtestest654

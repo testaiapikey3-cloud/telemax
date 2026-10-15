@@ -1,0 +1,175 @@
+/* ============================================================
+ * TeleMAX Web — chat.css
+ * Окно чата: шапка, пузыри, медиа, голосовые, файлы, опросы,
+ * composer, просмотрщик фото, экран звонка.
+ * ============================================================ */
+.chat-screen { background: var(--black); }
+
+/* ---------- шапка ---------- */
+.chat-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 4px;
+  background: rgba(16,16,18,.92); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border); z-index: 5;
+}
+.cc-main { flex: 1; min-width: 0; cursor: pointer; }
+.cc-name { font-weight: 700; font-size: 15.5px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-status { font-size: 12.5px; color: var(--gray); }
+.chat-head .icon-btn { width: 40px; height: 40px; }
+.chat-head .icon-btn .ic { width: 19px; height: 19px; }
+
+/* ---------- тело ---------- */
+.chat-body {
+  flex: 1; overflow-y: auto; position: relative;
+  background: var(--black);
+  padding: 10px 10px 4px;
+}
+.msgs { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; min-height: 100%; justify-content: flex-end; }
+.chat-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--surface3); padding: 80px 0; font-size: 15px; }
+.chat-empty .ic { width: 60px; height: 60px; }
+
+.date-divider {
+  align-self: center; background: rgba(32,32,36,.9); color: var(--gray-light);
+  font-size: 12px; padding: 5px 14px; border-radius: 12px; margin: 12px 0 6px;
+}
+.typing-pill {
+  align-self: flex-start; background: var(--surface2); color: var(--gray);
+  font-size: 12.5px; padding: 7px 14px; border-radius: 14px; margin-top: 4px;
+  animation: pulse 1.4s ease infinite;
+}
+@keyframes pulse { 0%,100% { opacity: .6 } 50% { opacity: 1 } }
+.msg-system { align-self: center; background: rgba(32,32,36,.85); color: var(--gray-light); font-size: 12.5px; padding: 7px 14px; border-radius: 14px; margin: 6px 0; max-width: 86%; text-align: center; white-space: pre-line; }
+
+/* ---------- пузыри ---------- */
+.msg { display: flex; max-width: 100%; }
+.msg.mine { justify-content: flex-end; }
+.msg.theirs { justify-content: flex-start; }
+.bubble {
+  max-width: 78%; padding: 8px 10px 6px; border-radius: 18px;
+  background: var(--surface2); position: relative;
+  animation: bubbleIn .18s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,.35);
+}
+@keyframes bubbleIn { from { transform: translateY(5px); opacity: 0 } }
+.msg.mine .bubble { background: var(--accent); color: #000; border-bottom-right-radius: 6px; }
+.msg.theirs .bubble { border-bottom-left-radius: 6px; }
+.msg-text { font-size: 15px; white-space: pre-wrap; word-break: break-word; }
+.msg-text a { color: inherit; text-decoration: underline; }
+.msg-caption { font-size: 14px; margin-top: 6px; }
+.msg-foot { display: flex; justify-content: flex-end; align-items: center; gap: 4px; font-size: 11px; color: rgba(0,0,0,.55); margin-top: 3px; padding-left: 8px; }
+.msg.theirs .msg-foot { color: var(--gray); }
+.ticks.read { color: #0a84ff; font-weight: 700; }
+.msg.theirs .ticks.read { color: #0a84ff; }
+
+.quote {
+  border-left: 3px solid rgba(0,0,0,.35); background: rgba(0,0,0,.14);
+  border-radius: 8px; padding: 5px 9px; margin-bottom: 6px; font-size: 12.5px;
+  display: flex; flex-direction: column; max-width: 100%;
+}
+.msg.theirs .quote { border-left-color: var(--accent); background: rgba(255,193,7,.08); }
+.quote b { font-size: 12px; opacity: .85; }
+.quote span { opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* медиа */
+.msg-img { max-width: 100%; width: auto; max-height: 360px; border-radius: 12px; display: block; cursor: pointer; object-fit: cover; }
+.msg-video { max-width: 100%; max-height: 360px; border-radius: 12px; display: block; background: #000; }
+.msg-file { display: flex; align-items: center; gap: 10px; min-width: 210px; cursor: pointer; padding: 3px 2px; }
+.msg-file .ic { width: 30px; height: 30px; }
+.mf-main { flex: 1; min-width: 0; }
+.mf-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+.mf-size { font-size: 12px; opacity: .7; }
+.msg-audio { display: flex; align-items: center; gap: 10px; min-width: 190px; padding: 3px 0; }
+.audio-btn { width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; background: var(--surface3); color: var(--white); display: flex; align-items: center; justify-content: center; }
+.msg.mine .audio-btn { background: rgba(0,0,0,.18); color: #000; }
+.audio-btn .ic { width: 18px; height: 18px; }
+.audio-bars { display: flex; align-items: center; gap: 3px; height: 26px; flex: 1; }
+.audio-bars i { width: 3px; border-radius: 2px; background: currentColor; opacity: .45; }
+.audio-time { font-size: 11.5px; opacity: .7; }
+.msg-gift { text-align: center; padding: 8px 16px; min-width: 170px; }
+.mg-emoji { font-size: 40px; }
+.mg-text { font-weight: 700; font-size: 14px; margin-top: 4px; }
+
+/* ---------- опрос ---------- */
+.poll-box { min-width: 220px; padding: 4px 2px; }
+.poll-q { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.poll-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.poll-opt {
+  position: relative; display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border-radius: 12px; cursor: pointer; overflow: hidden;
+  background: rgba(0,0,0,.10); border: 1px solid rgba(0,0,0,.08);
+  transition: background .15s;
+}
+.msg.theirs .poll-opt { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.07); }
+.poll-opt:hover { background: rgba(0,0,0,.16); }
+.po-bar { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(37,99,235,.28); border-radius: 12px; transition: width .3s; }
+.msg.theirs .po-bar { background: rgba(255,193,7,.20); }
+.poll-opt.mine .po-bar { background: rgba(0,0,0,.22); }
+.po-mark { position: relative; font-size: 13px; }
+.po-label { position: relative; flex: 1; font-size: 14px; }
+.po-pct { position: relative; font-size: 13px; font-weight: 700; }
+.poll-total { font-size: 12px; opacity: .65; margin-top: 8px; }
+
+/* ---------- composer ---------- */
+.composer-wrap { border-top: 1px solid var(--border); background: rgba(16,16,18,.94); }
+.reply-bar {
+  display: none; align-items: center; gap: 8px; padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.reply-bar.show { display: flex; }
+.rb-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.rb-main b { font-size: 12.5px; color: var(--accent); }
+.rb-main span { font-size: 13px; color: var(--gray); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.rec-bar .rec-hint { color: var(--gray); font-size: 12.5px; }
+.rec-bar #rec-send { margin-left: auto; }
+.rec-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--red); animation: recPulse 1s infinite; }
+@keyframes recPulse { 50% { opacity: .3 } }
+#rec-time { font-variant-numeric: tabular-nums; }
+#rec-cancel { margin-left: auto; }
+.composer { display: flex; align-items: flex-end; gap: 6px; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
+.composer textarea {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px;
+  color: var(--white); font-size: 15px; font-family: inherit; outline: none;
+  padding: 11px 16px; max-height: 110px; resize: none; line-height: 1.35;
+}
+.composer textarea::placeholder { color: var(--gray); }
+.composer .icon-btn { width: 42px; height: 42px; }
+.send-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--accent); color: #000; display: grid; place-items: center;
+  transition: transform .1s;
+}
+.send-btn:active { transform: scale(.92); }
+.send-btn .ic { width: 21px; height: 21px; }
+
+/* ---------- просмотрщик фото ---------- */
+.viewer-back {
+  position: fixed; inset: 0; z-index: 120; background: rgba(5,5,6,.97);
+  display: flex; flex-direction: column; opacity: 0; transition: opacity .2s;
+}
+.viewer-back.show { opacity: 1; }
+.viewer-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; color: var(--gray-light); font-size: 14px; }
+.vh-actions { display: flex; gap: 4px; }
+.viewer-img { flex: 1; object-fit: contain; min-height: 0; user-select: none; }
+.viewer-thumbs { display: flex; gap: 8px; padding: 12px 14px calc(16px + env(safe-area-inset-bottom)); overflow-x: auto; justify-content: center; }
+.vt { width: 46px; height: 46px; border-radius: 10px; background-size: cover; background-position: center; opacity: .5; cursor: pointer; border: 2px solid transparent; flex: 0 0 auto; }
+.vt.active { opacity: 1; border-color: var(--accent); }
+
+/* ---------- экран звонка ---------- */
+.call-screen { background: #0b0b10; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#call-remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #0b0b10; }
+#call-local { position: absolute; top: 16px; right: 16px; width: 108px; height: 150px; object-fit: cover; border-radius: 14px; border: 1px solid var(--border); background: #111; z-index: 3; }
+.call-info {
+  position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: rgba(10,10,12,.55); backdrop-filter: blur(3px); padding: 24px 34px; border-radius: 26px;
+}
+.call-name { font-size: 22px; font-weight: 800; }
+.call-status { color: var(--gray-light); font-size: 15px; }
+.call-controls { position: absolute; bottom: 44px; display: flex; gap: 22px; z-index: 3; }
+.cc-btn {
+  width: 62px; height: 62px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--surface2); color: var(--white); display: grid; place-items: center;
+}
+.cc-btn .ic { width: 26px; height: 26px; }
+.cc-btn.off { background: #fff; color: #000; }
+.cc-btn.end { background: var(--red); color: #fff; }
+.cc-btn.end .ic { transform: rotate(133deg); }
