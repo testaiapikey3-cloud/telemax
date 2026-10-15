@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const WebSocket = require('ws');
 
 const PORT = Number(process.env.PORT || 8080);
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
 const VERSION = '1.0.0-web';
