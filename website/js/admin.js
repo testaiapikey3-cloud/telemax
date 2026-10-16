@@ -608,6 +608,9 @@ TM.admin = (function () {
   function bindNet() {
     TM.net.on('admin_check_ok', onCheck);
     TM.net.on('admin_snapshot', onSnapshot);
+    TM.net.on('support_new', m => {
+      ui.toast('🆘 ' + (m.name || ('@' + m.from)) + ': ' + String(m.text || '').replace(/\s+/g, ' ').slice(0, 90), 'warn');
+    });
     TM.net.on('admin_ok', m => {
       if (m.action === 'set_role') ui.toast('Роль: ' + TM.config.ROLES[m.role]);
       else if (['ban', 'unban', 'freeze', 'unfreeze'].includes(m.action)) ui.toast('Готово: ' + m.action + ' @' + m.target);

@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.2.1-web';
+const VERSION = '1.2.2-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -30,6 +30,8 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 /* автоперевод интерфейса: кэш словарей на диске */
 translate.init(path.join(__dirname, 'lang-cache'));
+/* токен перезапуска при деплое — читается только по SSH (server/restart.token) */
+try { fs.writeFileSync(path.join(__dirname, 'restart.token'), crypto.randomBytes(16).toString('hex'), { mode: 0o600 }); } catch (_) {}
 /* файлы сайта, которые нужно перевести при прогреве языка */
 function siteFiles() {
   const files = [path.join(ROOT, 'index.html'), path.join(ROOT, 'manifest.json'), path.join(ROOT, 'sw.js')];
@@ -37,7 +39,7 @@ function siteFiles() {
   return files;
 }
 /* системные строки push-уведомлений (тоже переводятся) */
-const PUSH_UI = ['Фото', 'Видео', 'Голосовое сообщение', 'Файл', 'Подарок', 'Опрос', 'Новое сообщение', 'звонит вам', '📞 Входящий звонок — TeleMAX', '📹 Видеозвонок — TeleMAX'];
+const PUSH_UI = ['Фото', 'Видео', 'Голосовое сообщение', 'Файл', 'Подарок', 'Опрос', 'Новое сообщение', 'звонит вам', '📞 Входящий звонок — TeleMAX', '📹 Видеозвонок — TeleMAX', '🆘 Запрос поддержки — TeleMAX'];
 
 /* ------------------------------ состояние ------------------------------ */
 const state = {
@@ -304,10 +306,7 @@ const httpServer = http.createServer((req, res) => {
     readJsonBody(req, body => {
       const tokFile = path.join(__dirname, 'restart.token');
       let tok = '';
-      try {
-        if (!fs.existsSync(tokFile)) fs.writeFileSync(tokFile, crypto.randomBytes(16).toString('hex'), { mode: 0o600 });
-        tok = fs.readFileSync(tokFile, 'utf8').trim();
-      } catch (_) {}
+      try { tok = fs.readFileSync(tokFile, 'utf8').trim(); } catch (_) {}
       const given = String((body && body.token) || req.headers['x-restart-token'] || '');
       if (!tok || given !== tok) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('forbidden'); }
       try { fs.unlinkSync(tokFile); } catch (_) {}
@@ -368,11 +367,15 @@ const httpServer = http.createServer((req, res) => {
       res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
       return res.end('Bad request');
     }
+    let st = null;
+    try { st = name ? fs.statSync(path.join(UPLOAD_DIR, name)) : null; } catch (_) {}
+    if (!st || !st.isFile()) { res.writeHead(404); return res.end('Not found'); }
     const file = path.join(UPLOAD_DIR, name);
-    if (!fs.existsSync(file)) { res.writeHead(404); return res.end('Not found'); }
     const ext = path.extname(name).toLowerCase();
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    return fs.createReadStream(file).pipe(res);
+    const rs = fs.createReadStream(file);
+    rs.on('error', () => { try { res.destroy(); } catch (_) {} });
+    return rs.pipe(res);
   }
 
   // статика сайта
@@ -407,7 +410,9 @@ const httpServer = http.createServer((req, res) => {
     }
   }
   res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': noCache ? 'no-cache' : 'public, max-age=300' });
-  fs.createReadStream(file).pipe(res);
+  const rs = fs.createReadStream(file);
+  rs.on('error', () => { try { res.destroy(); } catch (_) {} });
+  rs.pipe(res);
 });
 
 /* ------------------------------ WebSocket ------------------------------ */
@@ -809,6 +814,30 @@ wss.on('connection', (ws, req) => {
       const rep = { id: uid(), target, reason, from: user, fromRole: roleFor(a), status: 'new', created: now() };
       state.reports.unshift(rep); state.reports = state.reports.slice(0, 500); dirty = true; save();
       return send(ws, { type: 'report_ok', report: rep });
+    }
+
+    /* ---------- поддержка: запрос живого человека (любой пользователь) ---------- */
+    if (type === 'support_create') {
+      const a = state.accounts[user];
+      const text = String(m.text || '').trim().slice(0, 700);
+      if (!text) return send(ws, { type: 'error', message: 'Пустой запрос' });
+      const rep = { id: uid(), target: 'support', reason: text, from: user, fromRole: roleFor(a), status: 'new', created: now() };
+      state.reports.unshift(rep); state.reports = state.reports.slice(0, 500); dirty = true; save();
+      const fromName = (a && a.name) || ('@' + user);
+      for (const [u2, a2] of Object.entries(state.accounts)) {
+        if (u2 === user || roleFor(a2) < 4) continue;
+        broadcastUser(u2, { type: 'support_new', from: user, name: fromName, text: text.slice(0, 300), time: now() });
+        pushTo(u2, {
+          title: '🆘 Запрос поддержки — TeleMAX',
+          body: fromName + ': ' + text.replace(/\s+/g, ' ').slice(0, 140),
+          tag: 'support-' + user,
+          renotify: true,
+          vibrate: [300, 120, 300, 120, 300],
+          data: { kind: 'chat', chat: 'u_' + user, user: user, title: fromName },
+          _mk: T => { T = T || (s => s); return { title: T('🆘 Запрос поддержки — TeleMAX'), body: fromName + ': ' + text.replace(/\s+/g, ' ').slice(0, 140) }; }
+        });
+      }
+      return send(ws, { type: 'support_ok' });
     }
 
     /* ---------- админ ---------- */

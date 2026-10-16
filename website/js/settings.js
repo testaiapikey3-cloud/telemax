@@ -55,6 +55,7 @@ TM.settings = (function () {
     row('gift', 'NFT и подарки', 'Коллекция и отправка', () => TM.gifts.openCatalog());
     row('activity', 'Диагностика мессенджера', 'Живой онлайн, всего людей, пинг', diagnostics);
     row('code', 'Для разработчиков', 'Debug Mode, диагностика, сервер', devMenu);
+    row('help', 'Помощь и поддержка', 'TeleMAX AI ответит мгновенно', helpScreen);
     const ver = row('info', 'О TeleMAX', 'Версия ' + TM.config.VERSION, aboutTelemax);
     ver.classList.add('version-row');
     ver.onclick = () => {
@@ -178,12 +179,18 @@ TM.settings = (function () {
           row('info', 'Как включить на iPhone', '«Поделиться» → «На экран Домой», откройте TeleMAX с рабочего стола и включите уведомления здесь (нужен iOS 16.4+).', null);
         }
         if (ns.code === 'denied') {
-          row('warn', 'Уведомления запрещены', 'Разрешите их в настройках браузера для сайта telemax.alwaysdata.net', null);
+          const yaHint = (TM.notify.isYandex && TM.notify.isYandex())
+            ? 'Яндекс Браузер заблокировал их — нажмите, покажу как разрешить'
+            : 'Нажмите, покажу как разрешить их в браузере';
+          row('warn', 'Разрешить уведомления', yaHint, null, 'danger-row');
+          const fix = list.lastChild;
+          fix.onclick = async () => { await TM.notify.unblockHelp(); draw(); };
         }
         if (ns.code === 'ask' || ns.code === 'ready') {
           row('bell', ns.code === 'ask' ? 'Включить уведомления' : 'Подключить push', 'Разрешение и подписка на уведомления', async () => {
             const r = await TM.notify.enable();
             if (r.ok) ui.toast('Push-уведомления включены 🔔');
+            else if (r.denied) await TM.notify.unblockHelp();
             else ui.toast(r.reason || 'Не удалось включить', 'warn');
             draw();
           });
@@ -551,6 +558,64 @@ TM.settings = (function () {
     TM.net.on('__open', () => updateNetStatusInSettings());
   }
   function updateNetStatusInSettings() { refresh(); }
+
+  /* ---------- помощь и поддержка (ИИ) ---------- */
+  const HELP_TOPICS = [
+    'Как создать группу или канал?',
+    'Почему не работают звонки?',
+    'Как включить уведомления?',
+    'Как сменить язык интерфейса?',
+    'Как установить приложение на телефон?',
+    'Что такое подарки и TeleCoin?'
+  ];
+  function askAI(question) {
+    try {
+      const c = TM.bots.botChat('telemaxai');
+      TM.chat.open(c.id);
+      if (question) setTimeout(function () {
+        try { TM.chat.sendMessage(S.getChat(c.id) || c, { type: 'text', text: question }); } catch (_) {}
+      }, 420);
+    } catch (_) {}
+  }
+  function supportForm() {
+    ui.form('Связаться с поддержкой', [
+      { key: 'q', label: 'Опишите вопрос', multiline: true, placeholder: 'Что случилось? Администраторы получат ваш запрос.' }
+    ], 'Отправить').then(function (res) {
+      if (!res || !res.q || !res.q.trim()) return;
+      if (!TM.net.isOn()) { ui.toast('Нужно подключение к интернету', 'warn'); return; }
+      TM.net.send({ type: 'support_create', text: res.q.trim().slice(0, 600) });
+      ui.toast('Запрос передан администрации ✓');
+    }).catch(function () {});
+  }
+  function helpScreen() {
+    ui.pushScreen((node, handle) => {
+      node.classList.add('sub-screen', 'help-screen');
+      node.innerHTML =
+        '<div class="scr-head"><button class="icon-btn" id="hp-back">' + ui.icon('back') + '</button><div class="scr-title">Помощь и поддержка</div></div>' +
+        '<div class="hp-hero"><div class="hp-ai-ic">🤖</div><div class="hp-ai-t"><b>TeleMAX AI — ИИ-помощник</b><span>Отвечает мгновенно: о TeleMAX и на любые вопросы — как ChatGPT. Бесплатно, без VPN.</span></div></div>' +
+        '<div class="set-list" id="hp-actions"></div>' +
+        '<div class="dim pad">Частые вопросы — нажмите, и ИИ ответит</div>' +
+        '<div class="set-list" id="hp-topics"></div>';
+      node.querySelector('#hp-back').onclick = () => handle.close();
+      const acts = node.querySelector('#hp-actions');
+      const mk = (icon, title, sub, fn) => {
+        const r = U.el('div', 'set-row');
+        r.innerHTML = '<span class="set-ic">' + ui.icon(icon) + '</span><div class="ct-main"><b>' + title + '</b><span>' + sub + '</span></div>' + ui.icon('chevron');
+        r.onclick = fn;
+        acts.appendChild(r);
+        return r;
+      };
+      mk('chats', 'Спросить у ИИ', 'Открыть чат с TeleMAX AI', () => askAI(''));
+      mk('user', 'Позвать живого человека', 'Передать запрос администрации', supportForm);
+      const topics = node.querySelector('#hp-topics');
+      HELP_TOPICS.forEach(function (t) {
+        const r = U.el('div', 'set-row');
+        r.innerHTML = '<span class="set-ic">' + ui.icon('help') + '</span><div class="ct-main"><b>' + U.esc(t) + '</b></div>' + ui.icon('chevron');
+        r.onclick = () => askAI(t);
+        topics.appendChild(r);
+      });
+    });
+  }
 
   return { render, refresh, openPlugins, devMenu, bindNet, aboutTelemax, diagnostics };
 })();

@@ -37,6 +37,25 @@ TM.notify = (function () {
         (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
     } catch (_) { return false; }
   }
+  function isYandex() {
+    try { return /YaBrowser/i.test(navigator.userAgent); } catch (_) { return false; }
+  }
+  /* запрос разрешения: промис + старый колбэк (Яндекс Браузер, Safari) */
+  function requestPerm() {
+    return new Promise(resolve => {
+      if (!('Notification' in window)) return resolve('denied');
+      let done = false;
+      const finish = p => { if (!done) { done = true; resolve(p || permission()); } };
+      try {
+        const r = Notification.requestPermission(finish);
+        if (r && typeof r.then === 'function') r.then(finish, () => finish(permission()));
+      } catch (_) {
+        try { Notification.requestPermission().then(finish, () => finish(permission())); }
+        catch (__) { finish(permission()); }
+      }
+      setTimeout(() => finish(permission()), 45000);
+    });
+  }
   function settings() {
     try { const st = S.store(); return (st && st.settings) || {}; }
     catch (_) { return {}; }
@@ -218,11 +237,21 @@ TM.notify = (function () {
           : 'Этот браузер не поддерживает push-уведомления'
       };
     }
+    /* Важно: окно разрешения запрашиваем ДО любых await и сразу из нажатия —
+       Яндекс Браузер иначе молча отклоняет запрос */
+    let perm = permission();
+    if (perm === 'default') perm = await requestPerm();
+    if (perm !== 'granted') {
+      return {
+        ok: false,
+        denied: perm === 'denied',
+        reason: perm === 'denied'
+          ? 'Браузер заблокировал уведомления для сайта'
+          : 'Окно разрешения не появилось — попробуйте ещё раз'
+      };
+    }
     const reg = await register();
     if (!reg) return { ok: false, reason: 'Service worker не зарегистрировался' };
-    let perm = permission();
-    if (perm === 'default') perm = await Notification.requestPermission();
-    if (perm !== 'granted') return { ok: false, reason: 'Разрешение на уведомления не выдано' };
     const meta = await hasServerVapid();
     if (!meta) return { ok: false, reason: 'Сервер не поддерживает push (обновите сервер на хостинге)' };
     try {
@@ -299,7 +328,7 @@ TM.notify = (function () {
   function status() {
     if (!isSecure()) return { code: 'insecure', text: 'Нужен HTTPS-адрес сайта' };
     if (!pushSupported()) return { code: 'unsupported', text: 'Браузер не поддерживает push' };
-    if (permission() === 'denied') return { code: 'denied', text: 'Уведомления запрещены в настройках браузера' };
+    if (permission() === 'denied') return { code: 'denied', text: 'Заблокированы в браузере — нажмите, чтобы включить' };
     if (isIOS() && !isStandalone()) return { code: 'ios', text: 'На iPhone откройте через «На экран Домой»' };
     if (permission() === 'default') return { code: 'ask', text: 'Разрешение ещё не выдано' };
     if (hasPush()) return { code: 'on', text: 'Push подключены — придут и с закрытым сайтом' };
@@ -309,7 +338,7 @@ TM.notify = (function () {
   /* ---------- тест ---------- */
   async function testNotification() {
     const r = await subscribePush();
-    if (!r.ok) return r;
+    if (!r.ok) { if (r.denied) unblockHelp(); return r; }
     playMessageSound();
     vibrate([200, 100, 200]);
     await show('TeleMAX — проверка уведомлений', {
@@ -400,8 +429,45 @@ TM.notify = (function () {
       if (!ok) return;
       const r = await subscribePush();
       if (r.ok) ui.toast('Уведомления включены 🔔');
+      else if (r.denied) unblockHelp();
       else ui.toast(r.reason || 'Не получилось включить уведомления', 'warn');
     }
+  }
+
+  /* ---------- уведомления заблокированы: как включить ---------- */
+  async function unblockHelp() {
+    const ya = isYandex();
+    let host = 'сайт';
+    try { host = location.hostname || host; } catch (_) {}
+    const text = ya
+      ? 'Яндекс Браузер заблокировал уведомления для этого сайта. Как включить:\n\n1. Нажмите на 🔒 (замок) или щит слева от адреса сайта.\n2. «Настройки сайта» → «Уведомления» → «Разрешить».\n3. Если пункта нет — введите в адресную строку browser://settings/content/notifications, найдите ' + host + ' и поставьте «Разрешить».\n4. Вернитесь сюда и нажмите «Проверить снова».'
+      : 'Браузер заблокировал уведомления для этого сайта. Как включить:\n\n1. Нажмите на 🔒 (замок) слева от адреса сайта.\n2. «Настройки сайта» → «Уведомления» → «Разрешить».\n3. Вернитесь сюда и нажмите «Проверить снова».';
+    const act = await ui.modal({
+      title: 'Как включить уведомления',
+      text: text,
+      actions: [
+        { label: 'Проверить снова', primary: true, value: 'check' },
+        { label: 'Закрыть', value: false }
+      ]
+    });
+    if (act !== 'check') return { ok: false, reason: 'denied' };
+    if (permission() !== 'granted') {
+      const rl = await ui.modal({
+        title: 'Пока не разрешено',
+        text: 'Если вы уже выбрали «Разрешить» — обновите страницу, и настройка применится. После этого включите уведомления в настройках TeleMAX.',
+        actions: [
+          { label: 'Обновить страницу', primary: true, value: true },
+          { label: 'Позже', value: false }
+        ]
+      });
+      if (rl) { try { location.reload(); } catch (_) {} }
+      return { ok: false, reason: 'denied' };
+    }
+    const r = await subscribePush();
+    if (r.ok) ui.toast('Уведомления включены 🔔');
+    else if (r.denied) ui.toast('Ещё не разрешено — проверьте настройки браузера', 'warn');
+    else ui.toast(r.reason || 'Не получилось включить', 'warn');
+    return r;
   }
 
   /* ---------- запуск ---------- */
@@ -434,6 +500,7 @@ TM.notify = (function () {
     bind, status, enable: subscribePush, disable: disablePush,
     hasPush, supported: pushSupported, isIOS, isStandalone, isSecure, permission,
     incomingMessage, incomingCall, startRing, stopRing,
-    sendState, testNotification, openFromNotification, quietNow
+    sendState, testNotification, openFromNotification, quietNow,
+    isYandex, unblockHelp, requestPerm
   };
 })();

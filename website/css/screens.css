@@ -422,3 +422,12 @@ html.nogap .composer > * + * { margin-left: 6px; }
 html.nogap .call-controls > * + * { margin-left: 22px; }
 html.nogap .ct-user > * + * { margin-left: 12px; }
 html.nogap .dg-live > * + * { margin-left: 8px; }
+
+/* ---------- экран «Помощь и поддержка» ---------- */
+.hp-hero { display: flex; gap: 12px; align-items: center; margin: 12px 14px 6px; padding: 14px; border-radius: 16px; background: rgba(255, 193, 7, .07); border: 1px solid rgba(255, 193, 7, .2); }
+.hp-ai-ic { width: 46px; height: 46px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 24px; border-radius: 14px; background: rgba(255, 193, 7, .12); }
+.hp-ai-t b { display: block; font-size: 15.5px; margin-bottom: 3px; }
+.hp-ai-t span { display: block; font-size: 12.5px; color: var(--gray, #9aa3ad); line-height: 1.45; }
+html.nogap .hp-hero { display: block; }
+html.nogap .hp-ai-ic { float: left; margin: 0 12px 0 0; }
+html.nogap .hp-ai-t { overflow: hidden; }
