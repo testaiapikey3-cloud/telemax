@@ -185,7 +185,7 @@ TM.chat = (function () {
     const mine = m.mine;
     const wrap = U.el('div', 'msg ' + (mine ? 'mine' : 'theirs'));
     wrap.dataset.id = m.id;
-    const bubble = U.el('div', 'bubble bubble-' + m.type);
+    const bubble = U.el('div', 'bubble bubble-' + m.type + (m.circle ? ' bubble-circle' : ''));
 
     // ответ
     if (m.replyTo) {
@@ -204,6 +204,8 @@ TM.chat = (function () {
       img.onclick = () => TM.media.openViewer(c, m);
       bubble.appendChild(img);
       if (m.text) bubble.appendChild(U.el('div', 'msg-caption', U.esc(m.text)));
+    } else if (m.type === 'video' && m.circle) {
+      bubble.appendChild(buildCircle(m));
     } else if (m.type === 'video') {
       const v = U.el('video', 'msg-video');
       v.src = U.safeUrl(m.uri);
@@ -240,12 +242,57 @@ TM.chat = (function () {
 
   function quoteText(m) {
     if (m.type === 'image') return '🖼 Фото';
-    if (m.type === 'video') return '🎬 Видео';
+    if (m.type === 'video') return m.circle ? '🎥 Кружок' : '🎬 Видео';
     if (m.type === 'audio') return '🎤 Голосовое';
     if (m.type === 'file') return '📄 ' + (m.fileName || 'Файл');
     if (m.type === 'poll') return '📊 Опрос';
     if (m.type === 'gift') return '🎁 ' + (m.text || 'Подарок');
     return m.text || '';
+  }
+
+  /* видеокружок: круглый плеер с кольцом прогресса */
+  function buildCircle(m) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const box = U.el('div', 'msg-circle');
+    const clip = U.el('div', 'mc-clip');
+    const v = U.el('video', 'mc-v');
+    v.src = U.safeUrl(m.uri);
+    v.playsInline = true;
+    v.preload = 'metadata';
+    clip.appendChild(v);
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('class', 'mc-ring');
+    const mk = cls => {
+      const c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', '50'); c.setAttribute('cy', '50'); c.setAttribute('r', '47.5');
+      c.setAttribute('class', cls);
+      return c;
+    };
+    const track = mk('mc-ring-track'), prog = mk('mc-ring-prog');
+    const CIRC = 2 * Math.PI * 47.5;
+    prog.style.strokeDasharray = String(CIRC);
+    prog.style.strokeDashoffset = String(CIRC);
+    svg.appendChild(track); svg.appendChild(prog);
+    const play = U.el('div', 'mc-play');
+    play.innerHTML = ui.icon('play');
+    box.appendChild(clip); box.appendChild(svg); box.appendChild(play);
+    v.ontimeupdate = () => {
+      const d = v.duration || 0;
+      prog.style.strokeDashoffset = String(CIRC * (1 - (d ? v.currentTime / d : 0)));
+    };
+    v.onplay = () => box.classList.add('playing');
+    v.onpause = () => box.classList.remove('playing');
+    v.onended = () => {
+      try { v.currentTime = 0; } catch (_) {}
+      prog.style.strokeDashoffset = String(CIRC);
+      box.classList.remove('playing');
+    };
+    box.onclick = e => {
+      e.stopPropagation();
+      if (v.paused) v.play().catch(() => {}); else v.pause();
+    };
+    return box;
   }
   function linkify(s) {
     return s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
@@ -358,7 +405,7 @@ TM.chat = (function () {
   function sendMessage(c, data) {
     const m = {
       id: U.uid(), type: data.type || 'text', text: data.text || '', uri: data.uri || '',
-      fileName: data.fileName || '', fileSize: data.fileSize || 0, duration: data.duration || 0,
+      fileName: data.fileName || '', fileSize: data.fileSize || 0, duration: data.duration || 0, circle: !!data.circle,
       replyTo: replyTo ? replyTo.id : '', poll: data.poll || null, giftKind: data.giftKind || '', giftValue: data.giftValue || '',
       mine: true, from: S.s.user, time: Date.now(), status: 'sent'
     };
@@ -383,6 +430,7 @@ TM.chat = (function () {
       TM.net.send({
         type: 'chat_message', clientId: m.id, to: c.kind === 'private' ? c.username : 'g:' + c.id.slice(2),
         messageType: m.type, text: m.text, uri: m.uri, fileName: m.fileName, fileSize: m.fileSize,
+        circle: m.circle, duration: m.duration,
         replyTo: m.replyTo, poll: m.poll, giftKind: m.giftKind, giftValue: m.giftValue, id: m.id
       });
     } else {
@@ -415,6 +463,7 @@ TM.chat = (function () {
       items: [
         { icon: 'image', label: 'Фото', onClick: () => TM.attach.pick(c, 'image') },
         { icon: 'video', label: 'Видео', onClick: () => TM.attach.pick(c, 'video') },
+        { icon: 'camera', label: 'Видеокружок', onClick: () => TM.circle.record(c) },
         { icon: 'file', label: 'Файл', onClick: () => TM.attach.pick(c, 'file') },
         { icon: 'poll', label: 'Опрос', onClick: () => TM.polls.composer(c, sendMessage) },
         { icon: 'gift', label: 'Подарок', onClick: () => TM.gifts.openCatalog(c) },
@@ -613,6 +662,7 @@ TM.chat = (function () {
     return {
       id: m.id || U.uid(), type: m.messageType || m.type || 'text',
       text: m.text || '', uri: m.uri || '', fileName: m.fileName || '', fileSize: m.fileSize || 0,
+      duration: m.duration || 0, circle: !!m.circle,
       replyTo: m.replyTo || '', poll: m.poll || null, giftKind: m.giftKind || '', giftValue: m.giftValue || '',
       mine: !!mine, from: m.from, time: m.serverTime || Date.now(), status: 'read'
     };

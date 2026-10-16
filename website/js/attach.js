@@ -79,6 +79,29 @@ TM.attach = (function () {
     }
   }
 
+  async function sendCircleBlob(chat, blob, duration) {
+    const ext = /mp4/.test(blob.type || '') ? '.mp4' : '.webm';
+    const file = new File([blob], 'circle_' + Date.now() + ext, { type: blob.type || 'video/webm' });
+    if (TM.net.isOn()) {
+      const t = showProgress('Видеокружок');
+      try {
+        const r = await TM.net.upload(file, S.s.user, p => t.update(p));
+        t.close();
+        TM.chat.sendMessage(chat, { type: 'video', circle: true, uri: r.url, fileName: r.name, fileSize: r.size, duration });
+        S.store().analytics.mediaSent = (S.store().analytics.mediaSent || 0) + 1;
+        S.save();
+      } catch (e) { t.close(); ui.toast('Ошибка отправки кружка', 'err'); }
+      return;
+    }
+    if (file.size <= TM.config.LIMITS.LOCAL_MEDIA_MAX) {
+      const dataUrl = await U.readFile(file);
+      TM.chat.sendMessage(chat, { type: 'video', circle: true, uri: dataUrl, fileName: file.name, fileSize: file.size, duration });
+      ui.toast('Офлайн: кружок сохранён на устройстве', 'warn');
+    } else {
+      ui.toast('Кружок слишком большой для офлайна', 'err');
+    }
+  }
+
   /* мини-индикатор прогресса */
   function showProgress(name) {
     const box = U.el('div', 'upload-toast');
@@ -93,5 +116,5 @@ TM.attach = (function () {
     };
   }
 
-  return { pick, uploadAndSend, sendBlob, sendAudioBlob, showProgress };
+  return { pick, uploadAndSend, sendBlob, sendAudioBlob, sendCircleBlob, showProgress };
 })();

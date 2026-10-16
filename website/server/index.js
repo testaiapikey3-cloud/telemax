@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.2.3-web';
+const VERSION = '1.2.4-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -39,7 +39,7 @@ function siteFiles() {
   return files;
 }
 /* системные строки push-уведомлений (тоже переводятся) */
-const PUSH_UI = ['Фото', 'Видео', 'Голосовое сообщение', 'Файл', 'Подарок', 'Опрос', 'Новое сообщение', 'звонит вам', '📞 Входящий звонок — TeleMAX', '📹 Видеозвонок — TeleMAX', '🆘 Запрос поддержки — TeleMAX'];
+const PUSH_UI = ['Фото', 'Видео', 'Видеосообщение', 'Голосовое сообщение', 'Файл', 'Подарок', 'Опрос', 'Новое сообщение', 'звонит вам', '📞 Входящий звонок — TeleMAX', '📹 Видеозвонок — TeleMAX', '🆘 Запрос поддержки — TeleMAX'];
 
 /* ------------------------------ состояние ------------------------------ */
 const state = {
@@ -121,7 +121,7 @@ function previewOf(m, T) {
   T = T || (s => s);
   const t = String(m.messageType || m.type || 'text');
   if (t === 'image') return '🖼 ' + T('Фото');
-  if (t === 'video') return '🎬 ' + T('Видео');
+  if (t === 'video') return m.circle ? '🎥 ' + T('Видеосообщение') : '🎬 ' + T('Видео');
   if (t === 'audio') return '🎤 ' + T('Голосовое сообщение');
   if (t === 'file') return '📄 ' + (m.fileName || T('Файл'));
   if (t === 'gift') return '🎁 ' + (m.text || T('Подарок'));
@@ -505,6 +505,8 @@ function deliverChat(from, to, m) {
     messageType: String(m.messageType || 'text'),
     text: String(m.text || ''), uri: String(m.uri || ''),
     fileName: String(m.fileName || ''), fileSize: Number(m.fileSize || 0),
+    duration: Number(m.duration || 0),
+    circle: !!m.circle,
     replyTo: String(m.replyTo || ''),
     poll: m.poll || null,
     giftKind: String(m.giftKind || ''), giftValue: String(m.giftValue || ''),

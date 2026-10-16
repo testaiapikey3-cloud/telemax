@@ -23,7 +23,7 @@ TM.chats = (function () {
     const my = m.mine ? 'Вы: ' : '';
     const t = m.type;
     if (t === 'image') return my + '🖼 Фото';
-    if (t === 'video') return my + '🎬 Видео';
+    if (t === 'video') return my + (m.circle ? '🎥 Кружок' : '🎬 Видео');
     if (t === 'audio') return my + '🎤 Голосовое';
     if (t === 'file') return my + '📄 ' + (m.fileName || 'Файл');
     if (t === 'gift') return my + '🎁 ' + (m.text || 'Подарок');

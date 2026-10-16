@@ -178,3 +178,50 @@
 .cc-btn.off { background: #fff; color: #000; }
 .cc-btn.end { background: var(--red); color: #fff; }
 .cc-btn.end .ic { transform: rotate(133deg); }
+
+/* ---------- видеокружки: запись ---------- */
+.vc-overlay {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 130; background: rgba(8,8,10,.97);
+  display: flex; flex-direction: column; animation: vcIn .18s ease;
+}
+@keyframes vcIn { from { opacity: 0 } }
+.vc-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; color: #fff; }
+.vc-top .icon-btn { color: #fff; }
+.vc-title { font-weight: 700; font-size: 15px; opacity: .92; }
+.vc-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; min-height: 0; }
+.vc-circle { position: relative; width: min(74vw, 330px); height: min(74vw, 330px); border-radius: 50%; background: #000; }
+.vc-clip { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 50%; overflow: hidden; }
+.vc-clip video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.vc-clip video.mirror { transform: scaleX(-1); }
+.vc-ring { position: absolute; top: -3px; right: -3px; bottom: -3px; left: -3px; width: calc(100% + 6px); height: calc(100% + 6px); transform: rotate(-90deg); pointer-events: none; }
+.vc-ring-track, .vc-ring-prog { fill: none; stroke-width: 2.6; }
+.vc-ring-track { stroke: rgba(255,255,255,.10); }
+.vc-ring-prog { stroke: #fff; stroke-linecap: round; transition: stroke-dashoffset .12s linear; }
+.vc-badge { position: absolute; left: 50%; bottom: -36px; transform: translateX(-50%); color: #fff; font-size: 13px; font-variant-numeric: tabular-nums; opacity: .85; display: none; }
+.vc-overlay.vc-rec-mode .vc-badge, .vc-overlay.vc-preview .vc-badge { display: block; }
+.vc-hint { color: var(--gray); font-size: 13px; text-align: center; padding: 0 24px; min-height: 18px; }
+.vc-actions { display: flex; align-items: center; justify-content: center; gap: 34px; padding: 26px 0 calc(38px + env(safe-area-inset-bottom)); }
+.vc-rec { width: 84px; height: 84px; border-radius: 50%; border: 4px solid #fff; background: transparent; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.vc-rec i { display: block; width: 62px; height: 62px; border-radius: 50%; background: #e53935; transition: all .18s ease; }
+.vc-overlay.vc-rec-mode .vc-rec i { width: 30px; height: 30px; border-radius: 9px; }
+.vc-side { width: 58px; height: 58px; border-radius: 50%; border: none; background: rgba(255,255,255,.12); color: #fff; display: none; place-items: center; cursor: pointer; }
+.vc-overlay.vc-preview .vc-side { display: grid; }
+.vc-overlay.vc-preview .vc-rec { display: none; }
+.vc-side .ic { width: 24px; height: 24px; }
+.vc-side.vc-send { background: var(--accent); color: #000; }
+.vc-overlay.vc-rec-mode #vc-flip { opacity: .3; pointer-events: none; }
+
+/* ---------- видеокружки: сообщение в чате ---------- */
+.bubble.bubble-circle { padding: 3px 3px 2px; }
+.msg-circle { position: relative; width: 216px; height: 216px; cursor: pointer; }
+.mc-clip { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 50%; overflow: hidden; background: #000; }
+.mc-v { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.mc-ring { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; transform: rotate(-90deg); pointer-events: none; }
+.mc-ring-track, .mc-ring-prog { fill: none; stroke-width: 2.5; }
+.mc-ring-track { stroke: rgba(255,255,255,.16); }
+.mc-ring-prog { stroke: rgba(255,255,255,.8); stroke-linecap: round; }
+.msg.mine .mc-ring-track { stroke: rgba(0,0,0,.12); }
+.msg.mine .mc-ring-prog { stroke: rgba(0,0,0,.5); }
+.mc-play { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: grid; place-items: center; transition: opacity .2s; pointer-events: none; }
+.mc-play .ic { width: 26px; height: 26px; padding: 14px; box-sizing: content-box; border-radius: 50%; background: rgba(0,0,0,.42); color: #fff; }
+.msg-circle.playing .mc-play { opacity: 0; }
