@@ -20,7 +20,7 @@ const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
 /* официальные боты (для глобального поиска) */
 const BOT_ACCOUNTS = ['telemaxbot', 'botrast', 'telemany', 'telemaxai'];
-const VERSION = '1.2.8-web';
+const VERSION = '1.2.9-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -336,6 +336,67 @@ const httpServer = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('restarting');
       setTimeout(() => process.exit(0), 400);
+    });
+    return;
+  }
+
+  /* ---------- авто-объявление об обновлении в канал «TeleMAX Новости» ----------
+   * Деплой вызывает этот эндпоинт после каждого обновления: текст, фото, видео,
+   * файл, голосовое или опрос. Допуск — SSH-токен перезапуска (не расходуется)
+   * или admin-ключ. Сообщение доставляется всем подписчикам канала, офлайн —
+   * в очередь и Web Push. */
+  if (req.method === 'POST' && u.pathname === '/admin/announce') {
+    readJsonBody(req, body => {
+      const sendJson = (code, obj) => { try { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); } catch (_) {} };
+      const tokFile = path.join(__dirname, 'restart.token');
+      let tok = '';
+      try { tok = fs.readFileSync(tokFile, 'utf8').trim(); } catch (_) {}
+      const given = String((body && body.token) || req.headers['x-restart-token'] || '');
+      const keyOk = String((body && body.adminKey) || '') === ADMIN_KEY;
+      if (!keyOk && (!tok || given !== tok)) return sendJson(403, { ok: false, error: 'forbidden' });
+
+      const g = state.groups[String((body && body.channel) || OFFICIAL_CHANNEL_ID)];
+      if (!g || g.type !== 'channel') return sendJson(404, { ok: false, error: 'Канал не найден' });
+
+      const allowed = ['text', 'image', 'video', 'file', 'audio', 'poll'];
+      let messageType = allowed.indexOf(String(body && body.messageType)) >= 0 ? String(body.messageType) : 'text';
+      const bp = body && body.poll;
+      const poll = (bp && Array.isArray(bp.options) && bp.options.length) ? {
+        question: String(bp.question || '').slice(0, 300),
+        options: bp.options.slice(0, 10).map(o => String(o).slice(0, 100)),
+        votes: {}, time: now()
+      } : null;
+      if (messageType === 'text' && poll) messageType = 'poll';
+      if (messageType === 'poll' && !poll) return sendJson(400, { ok: false, error: 'Опрос пустой: нужен question и options' });
+
+      const text = String((body && body.text) || '').slice(0, 4000);
+      if (!text && messageType === 'text') return sendJson(400, { ok: false, error: 'Пустой текст объявления' });
+
+      const out = {
+        type: 'chat_message', id: uid(), from: g.owner, to: 'g:' + g.id,
+        clientId: 'announce_' + uid(4),
+        messageType, text,
+        uri: String((body && body.uri) || ''),
+        fileName: String((body && body.fileName) || ''),
+        fileSize: Number((body && body.fileSize) || 0),
+        duration: Number((body && body.duration) || 0),
+        circle: !!(body && body.circle),
+        replyTo: '', poll, giftKind: '', giftValue: '',
+        serverTime: now()
+      };
+
+      let delivered = 0;
+      for (const member of g.members) {
+        const pay = Object.assign({}, out, { groupName: g.name });
+        const n = broadcastUser(member, pay);
+        histAdd(member, pay);
+        if (!n) queueFor(member, pay);
+        if (!anyVisible(member)) pushTo(member, messagePush(g.owner, pay, g.name));
+        if (n) delivered++;
+      }
+      dirty = true; save();
+      console.log('announce:', g.id, messageType, '→ подписчиков', g.members.length, ', онлайн', delivered);
+      return sendJson(200, { ok: true, id: out.id, channel: g.id, members: g.members.length, delivered, messageType });
     });
     return;
   }
@@ -794,10 +855,20 @@ wss.on('connection', (ws, req) => {
       return;
     }
     if (type === 'poll_vote') {
-      const chatId = String(m.chatId || '');
-      const out = { type: 'poll_update', from: user, chatId, messageId: String(m.messageId || ''), option: Number(m.option), votes: m.votes || null, poll: m.poll || null };
-      if (chatId.startsWith('g:')) { const g = state.groups[chatId.slice(2)]; if (g) for (const mem of g.members) if (mem !== user) { if (!broadcastUser(mem, out)) queueFor(mem, out); } }
-      else { const to = clean(chatId.replace(/^u_/, '')); if (to && state.accounts[to]) { if (!broadcastUser(to, out)) queueFor(to, out); } }
+      const rawId = String(m.chatId || '');
+      const gid = rawId.startsWith('g:') ? rawId.slice(2) : (rawId.startsWith('g_') ? rawId.slice(2) : '');
+      const out = { type: 'poll_update', from: user, chatId: rawId, messageId: String(m.messageId || ''), option: Number(m.option), votes: m.votes || null, poll: m.poll || null };
+      if (gid) {
+        const g = state.groups[gid];
+        if (!g || !g.members.includes(user)) return;
+        const pay = Object.assign({}, out, { chatId: 'g_' + gid });
+        for (const mem of g.members) if (mem !== user) { if (!broadcastUser(mem, pay)) queueFor(mem, pay); }
+        /* свои другие устройства тоже видят голос */
+        broadcastUser(user, pay);
+      } else {
+        const to = clean(rawId.replace(/^u_/, ''));
+        if (to && state.accounts[to]) { if (!broadcastUser(to, out)) queueFor(to, out); broadcastUser(user, out); }
+      }
       return;
     }
 
