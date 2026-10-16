@@ -1,0 +1,70 @@
+/* ============================================================
+ * TeleMAX Web — desktop.css
+ * Широкая раскладка (как в MAX web): рейл навигации слева,
+ * колонка списка (чаты/звонки/контакты/настройки), область чата
+ * справа с узором-обоями. Телефоны не затрагиваются: все правила
+ * живут только внутри медиа-запроса, а .desk-pane по умолчанию скрыт.
+ * ============================================================ */
+.desk-pane { display: none; }
+
+@media (min-width: 860px) and (pointer: fine), (min-width: 1080px) {
+
+  /* ---------- оболочка: три колонки ---------- */
+  .shell {
+    max-width: none; margin: 0; border: none;
+    flex-direction: row; height: 100vh; height: 100dvh;
+  }
+
+  /* ---------- рейл навигации слева ---------- */
+  .tabbar {
+    order: -1; width: 78px; flex: 0 0 78px; flex-direction: column;
+    border-top: none; border-right: 1px solid var(--border);
+    padding: 10px 7px calc(10px + env(safe-area-inset-bottom));
+    gap: 6px; background: #101012;
+  }
+  .tabbar .tab {
+    flex: 0 0 auto; width: 64px; border-radius: 14px;
+    padding: 10px 2px 8px;
+  }
+  .tabbar .tab:hover { background: rgba(255,255,255,.06); }
+  .tabbar .tab.active { background: var(--surface2); }
+  .tabbar .tab[data-tab="settings"] { margin-top: auto; }
+  .tabbar .tab-badge { top: 6px; right: 8px; transform: none; }
+
+  /* ---------- колонка контента ---------- */
+  .tab-content {
+    flex: 0 0 356px; width: 356px;
+    border-right: 1px solid var(--border);
+  }
+  .netbar.show { position: fixed; top: 0; left: 78px; right: 0; z-index: 70; }
+
+  /* ---------- правая область: узор-обои + подсказка ---------- */
+  .desk-pane {
+    display: flex; flex: 1; min-width: 0; height: 100%;
+    align-items: center; justify-content: center;
+    background-color: #0c0e18;
+    background-image: url('../desk-pattern.svg');
+    background-size: 260px 260px;
+  }
+  .desk-hint { color: rgba(139,146,190,.5); font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+
+  /* ---------- всплывающие экраны (чат, профиль, …) — правая колонка ---------- */
+  #stack .screen {
+    left: 434px; right: 0; max-width: none; margin: 0;
+    border-left: 1px solid var(--border);
+  }
+
+  /* ---------- чат: комфортная ширина на большом экране ---------- */
+  .chat-body { padding: 12px 16px 4px; }
+  .msgs { max-width: 980px; width: 100%; margin: 0 auto; }
+  .composer { max-width: 980px; margin: 0 auto; width: 100%; }
+  .chat-empty { padding: 120px 0; }
+
+  /* ---------- мелкие штрихи под MAX ---------- */
+  #ch-new { background: var(--accent); color: #000; border: none; }
+  #ch-new:hover { background: var(--accent-dark); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a42; }
+  ::-webkit-scrollbar-track { background: transparent; }
+}

@@ -20,7 +20,7 @@ const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
 /* официальные боты (для глобального поиска) */
 const BOT_ACCOUNTS = ['telemaxbot', 'botrast', 'telemany', 'telemaxai'];
-const VERSION = '1.2.7-web';
+const VERSION = '1.2.8-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 

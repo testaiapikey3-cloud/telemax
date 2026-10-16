@@ -38,6 +38,12 @@ TM.app = (function () {
     content.id = 'tab-content';
     shell.appendChild(content);
 
+    /* правая область на широких экранах (desktop.css): обои как в MAX web */
+    const pane = U.el('div', 'desk-pane');
+    pane.id = 'desk-pane';
+    pane.innerHTML = '<div class="desk-hint">Выберите чат</div>';
+    shell.appendChild(pane);
+
     const nav = U.el('nav', 'tabbar');
     nav.id = 'tabbar';
     TABS.forEach(t => {
