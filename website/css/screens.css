@@ -6,10 +6,10 @@
  * ============================================================ */
 
 /* ================= Экран приветствия ================= */
-#auth { display: none; position: fixed; inset: 0; z-index: 50; background: var(--black); overflow-y: auto; }
+#auth { display: none; position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 50; background: var(--black); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #auth.show { display: block; }
 .welcome {
-  min-height: 100dvh; max-width: 520px; margin: 0 auto;
+  min-height: 100vh; min-height: 100dvh; max-width: 520px; margin: 0 auto;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 30px 26px; position: relative; text-align: center;
 }
@@ -37,7 +37,7 @@
 
 /* ---- вход/регистрация ---- */
 .authpane {
-  min-height: 100dvh; max-width: 520px; margin: 0 auto;
+  min-height: 100vh; min-height: 100dvh; max-width: 520px; margin: 0 auto;
   padding: 26px 26px 40px; display: flex; flex-direction: column;
 }
 .ap-back { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; color: var(--white); margin-bottom: 12px; }
@@ -68,7 +68,7 @@
 #app { display: none; }
 #app.show { display: block; }
 .shell {
-  max-width: 520px; margin: 0 auto; height: 100dvh;
+  max-width: 520px; margin: 0 auto; height: 100vh; height: 100dvh;
   display: flex; flex-direction: column; position: relative;
   background: var(--black);
   border-left: 1px solid rgba(255,255,255,.04); border-right: 1px solid rgba(255,255,255,.04);
@@ -78,12 +78,13 @@
   background: rgba(255,193,7,.12); color: var(--accent);
 }
 .netbar.show { display: block; }
-.tab-content { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; }
+.tab-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; position: relative; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 
 /* ---------- нижняя навигация ---------- */
 .tabbar {
   display: flex; border-top: 1px solid var(--border);
-  background: rgba(16,16,18,.94); backdrop-filter: blur(14px);
+  background: rgba(16,16,18,.94);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .tab {
@@ -211,18 +212,18 @@
 .accent-dot.active { border-color: #fff; }
 
 /* ================= Всплывающие экраны ================= */
-#stack { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+#stack { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 60; pointer-events: none; }
 #stack .screen {
   pointer-events: auto;
-  position: absolute; inset: 0; max-width: 520px; margin: 0 auto;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; max-width: 520px; margin: 0 auto;
   background: var(--black);
   display: flex; flex-direction: column;
   transform: translateX(30px); opacity: 0; transition: transform .24s, opacity .24s;
   overflow: hidden;
 }
 #stack .screen.show { transform: none; opacity: 1; }
-.sub-screen { overflow-y: auto; padding-bottom: 30px; }
-.profile-screen { overflow-y: auto; padding-bottom: 30px; }
+.sub-screen { overflow-y: auto; padding-bottom: 30px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.profile-screen { overflow-y: auto; padding-bottom: 30px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 
 /* ---------- профиль ---------- */
 .pf-head { padding: 8px 18px 4px; text-align: center; }
@@ -326,8 +327,9 @@
 .btn .oauth-svg { width: 21px; height: 21px; flex: 0 0 auto; }
 
 .oauth-overlay {
-  position: fixed; inset: 0; z-index: 90; padding: 18px;
-  background: rgba(0,0,0,.66); backdrop-filter: blur(4px);
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 90; padding: 18px;
+  background: rgba(0,0,0,.66);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
 }
 .oauth-card {
@@ -372,3 +374,51 @@
 @keyframes dgPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.75); } }
 .ok-green { color: var(--green, #22c55e); }
 .ok-red { color: var(--red, #ef4444); }
+
+/* ============================================================
+ * Язык интерфейса и выбор друзей (обновление 1.2.0)
+ * ============================================================ */
+.lang-screen .ch-search { margin: 10px 16px 6px; }
+.lang-screen .set-list { padding: 0 10px 30px; }
+.lang-screen .set-row .ct-main { flex: 1; min-width: 0; overflow: hidden; }
+.lang-screen .set-row .ct-main b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lang-screen .set-row .ct-main span { color: var(--gray); font-size: 12.5px; }
+.lang-screen .set-row.lang-active { background: rgba(255,193,7,.08); }
+.lang-screen .set-row > .ic:last-child { color: var(--accent); width: 18px; height: 18px; }
+.dim { opacity: .65; }
+
+/* выбор друзей при создании группы/канала */
+.pick-screen { display: flex; flex-direction: column; overflow: hidden !important; }
+.pick-sub { color: var(--gray); font-size: 13px; padding: 2px 18px 0; }
+.pick-screen .ch-search { margin: 10px 14px 6px; }
+.pick-list { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 4px 10px 12px; }
+.pick-item { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-radius: 14px; cursor: pointer; }
+.pick-item:hover { background: var(--surface); }
+.pick-item .ct-main { flex: 1; min-width: 0; }
+.pick-item .ct-main b { display: flex; align-items: center; font-size: 15px; white-space: nowrap; overflow: hidden; }
+.pick-item .ct-main span { color: var(--gray); font-size: 12.5px; }
+.pick-manual { border: 1px dashed rgba(255,255,255,.16); margin-bottom: 4px; }
+.pick-ic { width: 42px; height: 42px; flex: 0 0 auto; border-radius: 50%; background: var(--surface2); color: var(--gray-light); display: flex; align-items: center; justify-content: center; }
+.pick-ic .ic { width: 22px; height: 22px; }
+.pick-check { width: 24px; height: 24px; flex: 0 0 auto; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.25); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #000; box-sizing: border-box; }
+.pick-item.on .pick-check { background: var(--accent); border-color: var(--accent); }
+.pick-foot { padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
+.pick-foot .btn-big { margin-top: 0; }
+
+/* старый Chrome без flex-gap: отступы вручную (класс .nogap) */
+html.nogap .pick-item > * + * { margin-left: 12px; }
+html.nogap .set-row > * + * { margin-left: 14px; }
+html.nogap .ch-actions > * + * { margin-left: 6px; }
+html.nogap .ch-tabs > * + * { margin-left: 8px; }
+html.nogap .ch-search > * + * { margin-left: 10px; }
+html.nogap .tab > * + * { margin-top: 3px; }
+html.nogap .tabbar { justify-content: space-between; }
+html.nogap .pf-actions > * + * { margin-left: 22px; }
+html.nogap .pf-act > * + * { margin-top: 6px; }
+html.nogap .gift-grid { grid-gap: 10px; }
+html.nogap .chat-head > * + * { margin-left: 8px; }
+html.nogap .msg-foot > * + * { margin-left: 4px; }
+html.nogap .composer > * + * { margin-left: 6px; }
+html.nogap .call-controls > * + * { margin-left: 22px; }
+html.nogap .ct-user > * + * { margin-left: 12px; }
+html.nogap .dg-live > * + * { margin-left: 8px; }

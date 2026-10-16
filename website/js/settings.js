@@ -86,7 +86,7 @@ TM.settings = (function () {
   }
 
   function langName(code) {
-    return { ru: 'Русский', en: 'English', es: 'Español' }[code] || 'Русский';
+    return (TM.langs && TM.langs.name(code)) || code || 'Русский';
   }
 
   /* ---------- 2FA ---------- */
@@ -252,13 +252,51 @@ TM.settings = (function () {
 
   /* ---------- язык ---------- */
   function languageSettings() {
-    ui.sheet({
-      title: 'Язык',
-      items: [['ru', 'Русский'], ['en', 'English'], ['es', 'Español']].map(([code, name]) => ({
-        label: name, active: S.store().settings.language === code,
-        onClick: () => { S.store().settings.language = code; S.save(); ui.toast('Язык: ' + name); refresh(); }
-      }))
+    const cur = S.store().settings.language || 'ru';
+    const items = (TM.langs ? TM.langs.list : []).slice();
+    ui.pushScreen((node, handle) => {
+      node.classList.add('sub-screen', 'lang-screen');
+      node.innerHTML =
+        '<div class="scr-head"><button class="icon-btn" id="lg-back">' + ui.icon('back') + '</button><div class="scr-title">Язык · Language</div></div>' +
+        '<div class="ch-search">' + ui.icon('search') + '<input id="lg-q" placeholder="Поиск / Search…"></div>' +
+        '<div class="set-list" id="lg-list"></div>';
+      const list = node.querySelector('#lg-list');
+      const draw = () => {
+        const q = node.querySelector('#lg-q').value.trim().toLowerCase();
+        list.innerHTML = '';
+        const shown = items.filter(l => !q || l.name.toLowerCase().indexOf(q) >= 0 || l.code.toLowerCase().indexOf(q) >= 0);
+        shown.forEach(l => {
+          const r = U.el('div', 'set-row' + (l.code === cur ? ' lang-active' : ''));
+          r.innerHTML = '<span class="set-ic">' + ui.icon('globe') + '</span><div class="ct-main"><b>' + U.esc(l.name) + '</b><span>' + l.code + (l.rtl ? ' • справа налево' : '') + '</span></div>' + (l.code === cur ? ui.icon('check') : '');
+          r.onclick = () => { handle.close(); applyLanguage(l.code, l.name); };
+          list.appendChild(r);
+        });
+        if (!shown.length) list.innerHTML = '<div class="empty small"><div>Ничего не найдено</div></div>';
+      };
+      node.querySelector('#lg-back').onclick = () => handle.close();
+      node.querySelector('#lg-q').addEventListener('input', U.debounce(draw, 120));
+      draw();
     });
+  }
+
+  async function applyLanguage(code, name) {
+    const st = S.store().settings;
+    st.language = code;
+    S.save();
+    try { document.cookie = 'tmx_lang=' + encodeURIComponent(code) + '; path=/; max-age=31536000; SameSite=Lax'; } catch (_) {}
+    if (code === 'ru') { location.reload(); return; }
+    const back = U.el('div', 'modal-back show');
+    back.innerHTML = '<div class="modal"><div class="modal-title">Переводим интерфейс…</div>' +
+      '<div class="modal-text">' + U.esc(name || code) + '<br><br>Это займёт 5–20 секунд и делается один раз. Дальше всё будет мгновенно.</div></div>';
+    document.body.appendChild(back);
+    try {
+      await fetch((TM.net.httpBase ? TM.net.httpBase() : '') + '/lang/warm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lang: code })
+      });
+    } catch (_) {}
+    location.reload();
   }
 
   /* ---------- данные ---------- */

@@ -12,12 +12,13 @@ const http = require('http');
 const crypto = require('crypto');
 const WebSocket = require('ws');
 const push = require('./push');
+const translate = require('./translate');
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.1.0-web';
+const VERSION = '1.2.0-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -26,6 +27,17 @@ const DATA_FILE = process.env.TMX_STATE || path.join(__dirname, 'telemax-state.j
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const MAX_UPLOAD = 500 * 1024 * 1024;                  // 500 MB
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+/* автоперевод интерфейса: кэш словарей на диске */
+translate.init(path.join(__dirname, 'lang-cache'));
+/* файлы сайта, которые нужно перевести при прогреве языка */
+function siteFiles() {
+  const files = [path.join(ROOT, 'index.html'), path.join(ROOT, 'manifest.json'), path.join(ROOT, 'sw.js')];
+  try { for (const f of fs.readdirSync(path.join(ROOT, 'js'))) if (/\.js$/.test(f)) files.push(path.join(ROOT, 'js', f)); } catch (_) {}
+  return files;
+}
+/* системные строки push-уведомлений (тоже переводятся) */
+const PUSH_UI = ['Фото', 'Видео', 'Голосовое сообщение', 'Файл', 'Подарок', 'Опрос', 'Новое сообщение', 'звонит вам', '📞 Входящий звонок — TeleMAX', '📹 Видеозвонок — TeleMAX'];
 
 /* ------------------------------ состояние ------------------------------ */
 const state = {
@@ -81,16 +93,23 @@ function removeSub(user, endpoint) {
   const i = list.findIndex(s => s.endpoint === endpoint);
   if (i >= 0) { list.splice(i, 1); if (!list.length) delete state.pushSubs[k]; dirty = true; }
 }
-function previewOf(m) {
+function readCookie(req, name) {
+  try {
+    const m = String(req.headers.cookie || '').match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  } catch (_) { return ''; }
+}
+function previewOf(m, T) {
+  T = T || (s => s);
   const t = String(m.messageType || m.type || 'text');
-  if (t === 'image') return '🖼 Фото';
-  if (t === 'video') return '🎬 Видео';
-  if (t === 'audio') return '🎤 Голосовое сообщение';
-  if (t === 'file') return '📄 ' + (m.fileName || 'Файл');
-  if (t === 'gift') return '🎁 ' + (m.text || 'Подарок');
-  if (t === 'poll') return '📊 Опрос: ' + String((m.poll && m.poll.question) || '').slice(0, 100);
+  if (t === 'image') return '🖼 ' + T('Фото');
+  if (t === 'video') return '🎬 ' + T('Видео');
+  if (t === 'audio') return '🎤 ' + T('Голосовое сообщение');
+  if (t === 'file') return '📄 ' + (m.fileName || T('Файл'));
+  if (t === 'gift') return '🎁 ' + (m.text || T('Подарок'));
+  if (t === 'poll') return '📊 ' + T('Опрос') + ': ' + String((m.poll && m.poll.question) || '').slice(0, 100);
   const text = String(m.text || '').replace(/\s+/g, ' ').trim();
-  return text.slice(0, 140) || 'Новое сообщение';
+  return text.slice(0, 140) || T('Новое сообщение');
 }
 function pushTo(user, payload, opts) {
   const list = subsOf(user);
@@ -99,7 +118,13 @@ function pushTo(user, payload, opts) {
   let n = 0;
   for (const sub of list.slice()) {
     n++;
-    push.sendPush(sub, payload, state.vapid, options)
+    let pl = payload;
+    /* у каждой подписки свой язык — переводим системные строки уведомления */
+    const lang = translate.validLang(sub.lang);
+    if (lang && typeof payload._mk === 'function') {
+      try { pl = Object.assign({}, payload, payload._mk(s => (translate.cached(lang, s) || s))); } catch (_) { pl = payload; }
+    }
+    push.sendPush(sub, pl, state.vapid, options)
       .then(r => {
         if (r.gone) removeSub(user, sub.endpoint);
         else if (!r.ok) console.log('push:', user, r.status || '', r.error || '');
@@ -113,26 +138,42 @@ function messagePush(fromUser, out, groupName) {
   const fromName = fromAcc.name || ('@' + fromUser);
   const isGroup = !!groupName;
   const chatId = isGroup ? ('g_' + String(out.to).slice(2)) : ('u_' + clean(fromUser));
-  return {
-    title: isGroup ? groupName : fromName,
-    body: isGroup ? (fromName + ': ' + previewOf(out)) : previewOf(out),
+  const mk = T => {
+    T = T || (s => s);
+    return {
+      title: isGroup ? groupName : fromName,
+      body: isGroup ? (fromName + ': ' + previewOf(out, T)) : previewOf(out, T)
+    };
+  };
+  const payload = {
     tag: 'msg-' + chatId,
     renotify: true,
     vibrate: [180, 80, 180],
     data: { kind: 'chat', chat: chatId, user: clean(fromUser), title: fromName }
   };
+  Object.assign(payload, mk(null));
+  payload._mk = mk;
+  return payload;
 }
 function callPush(fromUser, m) {
   const fromAcc = state.accounts[fromUser] || {};
-  return {
-    title: m.video ? '📹 Видеозвонок — TeleMAX' : '📞 Входящий звонок — TeleMAX',
-    body: (fromAcc.name || ('@' + fromUser)) + ' звонит вам',
+  const mk = T => {
+    T = T || (s => s);
+    return {
+      title: T(m.video ? '📹 Видеозвонок — TeleMAX' : '📞 Входящий звонок — TeleMAX'),
+      body: (fromAcc.name || ('@' + fromUser)) + ' ' + T('звонит вам')
+    };
+  };
+  const payload = {
     tag: 'call-' + clean(fromUser),
     renotify: true,
     requireInteraction: true,
     vibrate: [500, 250, 500, 250, 500, 250, 500],
     data: { kind: 'call', user: clean(fromUser), title: fromAcc.name || fromUser }
   };
+  Object.assign(payload, mk(null));
+  payload._mk = mk;
+  return payload;
 }
 setInterval(() => {   // просроченные входящие вызовы (ушли в офлайн) — чистим
   const t = now();
@@ -192,13 +233,26 @@ const httpServer = http.createServer((req, res) => {
         return sendJson(400, { ok: false, error: 'Некорректная подписка' });
       }
       const list = state.pushSubs[user] || (state.pushSubs[user] = []);
-      const rec = { endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) }, time: now(), ua: String(req.headers['user-agent'] || '').slice(0, 140) };
+      const rec = { endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) }, time: now(), ua: String(req.headers['user-agent'] || '').slice(0, 140), lang: translate.validLang(body && body.lang) };
       const existing = list.find(x => x.endpoint === sub.endpoint);
       if (existing) Object.assign(existing, rec);
       else list.unshift(rec);
       if (list.length > 10) list.length = 10;
       dirty = true; save();
       sendJson(200, { ok: true, count: list.length });
+    });
+    return;
+  }
+
+  /* ---------- автоперевод интерфейса: прогрев языка ---------- */
+  if (req.method === 'POST' && u.pathname === '/lang/warm') {
+    readJsonBody(req, body => {
+      const sendJson = (code, obj) => { try { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); } catch (_) {} };
+      const lang = translate.validLang(body && body.lang);
+      if (!lang) return sendJson(400, { ok: false, error: 'Неподдерживаемый код языка' });
+      translate.warmBundle(lang, siteFiles(), PUSH_UI)
+        .then(st => sendJson(200, st))
+        .catch(e => sendJson(500, { ok: false, error: String((e && e.message) || e) }));
     });
     return;
   }
@@ -244,8 +298,17 @@ const httpServer = http.createServer((req, res) => {
   }
 
   // статика сайта
-  let p = decodeURIComponent(u.pathname);
+  let p;
+  try { p = decodeURIComponent(u.pathname); } catch (_) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Bad request');
+  }
   if (p === '/' || p === '') p = '/index.html';
+  /* защита: файлы и данные сервера наружу не отдаём (telemax-state.json, код сервера) */
+  if (p === '/server' || p.startsWith('/server/') || p.startsWith('/.')) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Not found');
+  }
   const file = path.normalize(path.join(ROOT, p));
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -253,6 +316,18 @@ const httpServer = http.createServer((req, res) => {
   }
   const ext = path.extname(file).toLowerCase();
   const noCache = ['.html', '.js', '.css'].includes(ext);
+
+  /* перевод интерфейса: язык из ?lang= (и запоминаем в cookie) или из cookie tmx_lang */
+  let lang = translate.validLang(u.searchParams.get('lang'));
+  if (!lang && !u.searchParams.has('lang')) lang = translate.validLang(readCookie(req, 'tmx_lang'));
+  if (lang && (ext === '.js' || ext === '.html' || ext === '.json')) {
+    if (u.searchParams.get('lang')) res.setHeader('Set-Cookie', 'tmx_lang=' + encodeURIComponent(lang) + '; Path=/; Max-Age=31536000; SameSite=Lax');
+    const body = translate.transformFile(file, lang, () => translate.warmSoon(lang, siteFiles(), PUSH_UI));
+    if (body != null) {
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': noCache ? 'no-cache' : 'public, max-age=300' });
+      return res.end(body);
+    }
+  }
   res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': noCache ? 'no-cache' : 'public, max-age=300' });
   fs.createReadStream(file).pipe(res);
 });

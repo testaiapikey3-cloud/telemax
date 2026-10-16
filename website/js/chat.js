@@ -15,6 +15,9 @@ TM.chat = (function () {
   let cur = null;           // chatId
   let replyTo = null;       // сообщение для ответа
   let msgsEl = null;
+  let stick = true;        // держимся у нижнего края (как в мессенджерах)
+  let forceBottom = false; // принудительный скролл (открытие чата, своё сообщение)
+  let scrollTimers = [];
   let inputEl = null;
   let typingSentAt = 0;
   let recorder = null, recChunks = [], recStart = 0, recTimer = null;
@@ -40,6 +43,12 @@ TM.chat = (function () {
       body.appendChild(msgsEl);
       node.appendChild(body);
       buildComposer(node, c);
+      stick = true;
+      forceBottom = true;
+      body.addEventListener('scroll', () => {
+        const dist = body.scrollHeight - body.scrollTop - body.clientHeight;
+        stick = dist < 140;
+      }, { passive: true });
       renderMessages();
       markPeerRead();
       if (TM.app.tab === 'chats') TM.chats.render();
@@ -126,11 +135,20 @@ TM.chat = (function () {
   }
 
   /* ---------- рендер сообщений ---------- */
+  function scrollBottomSoon(body) {
+    const el = body || (msgsEl && msgsEl.parentElement);
+    if (!el) return;
+    const go = () => { if (msgsEl && el === msgsEl.parentElement) el.scrollTop = el.scrollHeight; };
+    go();
+    scrollTimers.forEach(t => clearTimeout(t));
+    scrollTimers = [setTimeout(go, 80), setTimeout(go, 250), setTimeout(go, 700)];
+  }
+
   function renderMessages() {
     if (!msgsEl || !cur) return;
     const c = S.getChat(cur);
     if (!c) return;
-    const nearBottom = msgsEl.parentElement.scrollHeight - msgsEl.parentElement.scrollTop - msgsEl.parentElement.clientHeight < 120;
+    const nearBottom = msgsEl.parentElement.scrollHeight - msgsEl.parentElement.scrollTop - msgsEl.parentElement.clientHeight < 140;
     msgsEl.innerHTML = '';
     if (!c.messages.length) {
       msgsEl.innerHTML = '<div class="chat-empty">' + ui.icon('chats') + '<div>Начните переписку</div></div>';
@@ -150,7 +168,13 @@ TM.chat = (function () {
       msgsEl.appendChild(U.el('div', 'typing-pill', U.esc(c.name) + ' печатает…'));
     }
     const body = msgsEl.parentElement;
-    if (nearBottom) body.scrollTop = body.scrollHeight;
+    const force = forceBottom;
+    forceBottom = false;
+    if (force || nearBottom || stick) scrollBottomSoon(body);
+    // картинки догружаются позже — если мы у низа, доводим прокрутку
+    msgsEl.querySelectorAll('img').forEach(img => {
+      if (!img.complete) img.addEventListener('load', () => { if (stick) scrollBottomSoon(); }, { once: true });
+    });
   }
 
   function renderMessage(m, c) {
@@ -341,7 +365,7 @@ TM.chat = (function () {
     replyTo = null;
     const rb = U.$('#reply-bar'); if (rb) rb.classList.remove('show');
     S.addMessage(c.id, m);
-    if (cur === c.id) renderMessages();
+    if (cur === c.id) { stick = true; renderMessages(); }
     TM.app && TM.app.updateTabBadge();
     TM.chats.render();
     S.store().analytics.messagesSent = (S.store().analytics.messagesSent || 0) + 1;
@@ -592,6 +616,14 @@ TM.chat = (function () {
       mine: !!mine, from: m.from, time: m.serverTime || Date.now(), status: 'read'
     };
   }
+
+  /* клавиатура/поворот экрана: если мы у низа — остаёмся у низа */
+  function onViewportChange() { if (stick && msgsEl) setTimeout(() => scrollBottomSoon(), 60); }
+  try {
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportChange);
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+  } catch (_) {}
 
   return { open, refreshIfOpen, renderMessages, sendMessage, chooseWallpaper, bindNet, setInput, receiveMessage };
 })();

@@ -7,7 +7,7 @@ window.TM = window.TM || {};
 TM.config = (function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.2.0';
   const APP_NAME = 'TeleMAX';
 
   // Роли 0–5 (как в Android-версии)
@@ -123,7 +123,7 @@ TM.config = (function () {
     ABOUT_MAX: 300
   };
 
-  const BOT_USERNAMES = { telemaxbot: 'TeleMAX Bot', botrast: 'BotRast', telemany: 'TeleMany' };
+  const BOT_USERNAMES = { telemaxbot: 'TeleMAX Bot', botrast: 'BotRast', telemany: 'TeleMany', telemaxai: 'TeleMAX AI' };
 
   return { VERSION, APP_NAME, ROLES, LEVEL5_USERNAMES, GIFTS, NFT_CATALOG, PREMIUM_PRICE, WALLPAPERS, ACCENTS, PLUGINS, LIMITS, BOT_USERNAMES };
 })();

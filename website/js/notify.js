@@ -233,7 +233,7 @@ TM.notify = (function () {
       const res = await fetch(TM.net.httpBase() + '/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: S.s.user, subscription: sub.toJSON() })
+        body: JSON.stringify({ user: S.s.user, subscription: sub.toJSON(), lang: (window.TM && TM.langs ? TM.langs.current() : '') })
       }).then(r => r.json()).catch(() => null);
       if (!res || !res.ok) {
         pushSub = null;
@@ -258,10 +258,21 @@ TM.notify = (function () {
     if (!reg || !pushSupported()) return false;
     try {
       const sub = await reg.pushManager.getSubscription();
-      if (sub) { pushSub = sub; return true; }
+      if (sub) { pushSub = sub; syncPushLang(sub); return true; }
     } catch (_) {}
     pushSub = null;
     return false;
+  }
+  /* при каждом входе обновляем язык подписки — push-уведомления придут на нужном языке */
+  function syncPushLang(sub) {
+    if (!S.s.user || !sub) return;
+    try {
+      fetch(TM.net.httpBase() + '/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: S.s.user, subscription: sub.toJSON(), lang: (window.TM && TM.langs ? TM.langs.current() : '') })
+      }).catch(() => {});
+    } catch (_) {}
   }
   async function disablePush() {
     const st = settings();

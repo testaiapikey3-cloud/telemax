@@ -8,7 +8,8 @@
 /* ---------- шапка ---------- */
 .chat-head {
   display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 4px;
-  background: rgba(16,16,18,.92); backdrop-filter: blur(14px);
+  background: rgba(16,16,18,.92);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border); z-index: 5;
 }
 .cc-main { flex: 1; min-width: 0; cursor: pointer; }
@@ -19,11 +20,13 @@
 
 /* ---------- тело ---------- */
 .chat-body {
-  flex: 1; overflow-y: auto; position: relative;
+  flex: 1; min-height: 0; overflow-y: auto; position: relative;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   background: var(--black);
   padding: 10px 10px 4px;
 }
-.msgs { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; min-height: 100%; justify-content: flex-end; }
+.msgs { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
+.msgs::before { content: ''; margin-top: auto; }
 .chat-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--surface3); padding: 80px 0; font-size: 15px; }
 .chat-empty .ic { width: 60px; height: 60px; }
 
@@ -143,7 +146,7 @@
 
 /* ---------- просмотрщик фото ---------- */
 .viewer-back {
-  position: fixed; inset: 0; z-index: 120; background: rgba(5,5,6,.97);
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 120; background: rgba(5,5,6,.97);
   display: flex; flex-direction: column; opacity: 0; transition: opacity .2s;
 }
 .viewer-back.show { opacity: 1; }
@@ -156,11 +159,13 @@
 
 /* ---------- экран звонка ---------- */
 .call-screen { background: #0b0b10; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-#call-remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #0b0b10; }
+#call-remote { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; object-fit: cover; background: #0b0b10; }
 #call-local { position: absolute; top: 16px; right: 16px; width: 108px; height: 150px; object-fit: cover; border-radius: 14px; border: 1px solid var(--border); background: #111; z-index: 3; }
 .call-info {
   position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 10px;
-  background: rgba(10,10,12,.55); backdrop-filter: blur(3px); padding: 24px 34px; border-radius: 26px;
+  background: rgba(10,10,12,.55);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  padding: 24px 34px; border-radius: 26px;
 }
 .call-name { font-size: 22px; font-weight: 800; }
 .call-status { color: var(--gray-light); font-size: 15px; }

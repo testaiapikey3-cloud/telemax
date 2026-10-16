@@ -107,13 +107,15 @@ a { color: var(--accent); text-decoration: none; }
 
 /* ---------- модалки ---------- */
 .modal-back {
-  position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,.6); backdrop-filter: blur(6px);
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.6);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   opacity: 0; transition: opacity .2s; padding: 18px;
 }
 .modal-back.show { opacity: 1; }
 .modal {
   width: 100%; max-width: 400px; max-height: 86vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 20px; padding: 20px;
   transform: translateY(14px) scale(.97); transition: transform .22s;
@@ -126,7 +128,7 @@ a { color: var(--accent); text-decoration: none; }
 
 /* ---------- шторка ---------- */
 .sheet-back {
-  position: fixed; inset: 0; z-index: 95; display: flex; align-items: flex-end; justify-content: center;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 95; display: flex; align-items: flex-end; justify-content: center;
   background: rgba(0,0,0,.55); opacity: 0; transition: opacity .2s;
 }
 .sheet-back.show { opacity: 1; }
@@ -134,6 +136,7 @@ a { color: var(--accent); text-decoration: none; }
   width: 100%; max-width: 520px; background: var(--surface);
   border-radius: 22px 22px 0 0; padding: 10px 10px 18px;
   max-height: 78vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   transform: translateY(30px); transition: transform .22s;
 }
 .sheet-back.show .sheet { transform: none; }
@@ -157,7 +160,7 @@ a { color: var(--accent); text-decoration: none; }
 #toasts {
   position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
   z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center;
-  pointer-events: none; width: min(92vw, 460px);
+  pointer-events: none; width: 92vw; max-width: 460px;
 }
 .toast {
   background: rgba(32,32,36,.96); border: 1px solid var(--border);
@@ -174,7 +177,7 @@ a { color: var(--accent); text-decoration: none; }
 /* ---------- прогресс загрузки ---------- */
 .upload-toast {
   position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
-  z-index: 150; width: min(88vw, 380px);
+  z-index: 150; width: 88vw; max-width: 380px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
   padding: 12px 16px; opacity: 0; transition: all .25s;
   box-shadow: 0 10px 30px rgba(0,0,0,.5);
@@ -213,3 +216,28 @@ a { color: var(--accent); text-decoration: none; }
   .modal-back { align-items: flex-end; padding: 0; }
   .modal { max-width: 100%; border-radius: 22px 22px 0 0; }
 }
+
+/* ============================================================
+ * Старые телефоны (Android 5+) и слабые устройства:
+ * класс .lite вешается на <html> автоматически (js/compat.js),
+ * класс .nogap — если браузер не умеет flex-gap.
+ * ============================================================ */
+html.lite * {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transition-duration: .05s !important;
+  animation-duration: .001s !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html.lite .tabbar { background: rgba(16,16,18,.98); }
+html.lite .toast { box-shadow: none; }
+html.lite .w-glow { display: none; }
+html.lite .w-plane svg { filter: none; }
+
+html.nogap #toasts > * + * { margin-top: 8px; }
+html.nogap .modal-actions > * + * { margin-left: 10px; }
+html.nogap .sheet-item > * + * { margin-left: 14px; }
+html.nogap .btn > * + * { margin-left: 8px; }
+html.nogap .form > * + * { margin-top: 12px; }
+html.nogap .empty > * + * { margin-top: 10px; }

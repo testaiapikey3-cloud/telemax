@@ -14,6 +14,7 @@ TM.chats = (function () {
   let filter = 'all';      // all | channels | groups | private
   let query = '';
   let host = null;
+  let openNextOwn = false; // открыть чат сразу после создания своей группы
 
   /* ---------- превью последнего сообщения ---------- */
   function preview(chat) {
@@ -157,17 +158,114 @@ TM.chats = (function () {
 
   async function createGroupFlow(kind) {
     const v = await ui.form(kind === 'group' ? 'Новая группа' : 'Новый канал', [
-      { key: 'name', label: 'Название', placeholder: kind === 'group' ? 'Моя группа' : 'Мой канал' },
-      { key: 'members', label: 'Участники (@username через запятую)', placeholder: 'rustam_max, anna_fed', multiline: true }
-    ], 'Создать');
-    if (!v || !v.name) return;
-    const members = String(v.members || '').split(',').map(x => x.trim().replace(/^@/, '').toLowerCase()).filter(Boolean);
+      { key: 'name', label: 'Название', placeholder: kind === 'group' ? 'Моя группа' : 'Мой канал', maxlength: 64 }
+    ], 'Далее');
+    if (!v || !v.name || !String(v.name).trim()) return;
+    membersPicker(kind, String(v.name).trim());
+  }
+
+  /* ---------- выбор участников: нажимаем на друзей, не печатаем @username ---------- */
+  function friendsForPicker() {
+    const map = Object.create(null);
+    Object.values(S.s.contacts || {}).forEach(u => {
+      if (!u || !u.user || u.user === S.s.user) return;
+      if (TM.config.BOT_USERNAMES[u.user]) return;
+      map[u.user] = { user: u.user, name: u.name || ('@' + u.user), avatar: u.avatar || '' };
+    });
+    Object.values(S.store().chats || {}).forEach(c => {
+      if (!c || c.kind !== 'private' || !c.username || c.username === S.s.user) return;
+      if (TM.config.BOT_USERNAMES[c.username]) return;
+      const cur = map[c.username] || {};
+      map[c.username] = {
+        user: c.username,
+        name: (c.name && c.name !== '@' + c.username ? c.name : (cur.name || c.name || ('@' + c.username))),
+        avatar: c.avatar || cur.avatar || ''
+      };
+    });
+    const list = Object.values(map);
+    list.sort((a, b) => String(a.name).toLowerCase().localeCompare(String(b.name).toLowerCase()));
+    return list;
+  }
+
+  function membersPicker(kind, name) {
+    const checked = Object.create(null);
+    const extra = [];
+    let query = '';
+    ui.pushScreen((node, handle) => {
+      node.classList.add('pick-screen');
+      node.innerHTML =
+        '<div class="scr-head"><button class="icon-btn" id="pk-back">' + ui.icon('back') + '</button>' +
+        '<div class="scr-title">' + (kind === 'group' ? 'Кто войдёт в группу?' : 'Кто подпишется на канал?') + '</div></div>' +
+        '<div class="pick-sub">«' + U.esc(name) + '»</div>' +
+        '<div class="ch-search">' + ui.icon('search') + '<input id="pk-q" placeholder="Поиск друга по имени или @username"></div>' +
+        '<div class="pick-list" id="pk-list"></div>' +
+        '<div class="pick-foot"><button class="btn btn-primary btn-big" id="pk-go">Создать</button></div>';
+      const list = node.querySelector('#pk-list');
+      const btn = node.querySelector('#pk-go');
+      const updateBtn = () => {
+        const n = Object.keys(checked).filter(k => checked[k]).length;
+        btn.textContent = (kind === 'group' ? 'Создать группу' : 'Создать канал') + (n ? ' (' + n + ')' : '');
+      };
+      const draw = () => {
+        list.innerHTML = '';
+        const manual = U.el('div', 'pick-item pick-manual');
+        manual.innerHTML = '<span class="pick-ic">' + ui.icon('user') + '</span><div class="ct-main"><b>Добавить по @username</b><span>если человека нет в списке</span></div>';
+        manual.onclick = async () => {
+          const v = await ui.form('Добавить по @username', [{ key: 'u', label: '@username', placeholder: 'например: rustam_max' }], 'Добавить');
+          if (!v || !v.u) return;
+          const un = String(v.u).trim().replace(/^@/, '').toLowerCase();
+          if (!un || un === S.s.user) return;
+          checked[un] = true;
+          if (!extra.some(x => x.user === un)) extra.push({ user: un, name: '@' + un, avatar: '' });
+          draw();
+        };
+        list.appendChild(manual);
+        const base = friendsForPicker();
+        const all = base.concat(extra.filter(x => !base.some(f => f.user === x.user)));
+        const q = query.trim().toLowerCase();
+        const shown = all.filter(u => !q || (u.name || '').toLowerCase().indexOf(q) >= 0 || u.user.indexOf(q) >= 0);
+        if (!shown.length) {
+          const e = U.el('div', 'empty small');
+          e.innerHTML = '<div>Друзья не найдены</div><div class="dim">Список друзей загружается, когда есть связь с сервером</div>';
+          list.appendChild(e);
+        }
+        shown.forEach(u => {
+          const on = !!checked[u.user];
+          const row = U.el('div', 'pick-item' + (on ? ' on' : ''));
+          row.innerHTML =
+            ui.avatarHTML(u.name, u.avatar, S.isOnline(u.user), 'md') +
+            '<div class="ct-main"><b>' + U.esc(u.name) + ui.verifiedBadge(u.user) + '</b><span>@' + U.esc(u.user) + '</span></div>' +
+            '<span class="pick-check">' + (on ? '✓' : '') + '</span>';
+          row.onclick = () => {
+            checked[u.user] = !checked[u.user];
+            row.classList.toggle('on');
+            row.querySelector('.pick-check').textContent = checked[u.user] ? '✓' : '';
+            updateBtn();
+          };
+          list.appendChild(row);
+        });
+        updateBtn();
+      };
+      node.querySelector('#pk-back').onclick = () => handle.close();
+      node.querySelector('#pk-q').addEventListener('input', U.debounce(() => { query = node.querySelector('#pk-q').value; draw(); }, 150));
+      btn.onclick = () => {
+        const members = Object.keys(checked).filter(k => checked[k] && k !== S.s.user);
+        handle.close();
+        finishGroup(kind, name, members);
+      };
+      draw();
+    });
+  }
+
+  function finishGroup(kind, name, members) {
     if (TM.net.isOn()) {
-      TM.net.send({ type: 'create_group', name: v.name.trim(), kind, members });
+      openNextOwn = true;
+      TM.net.send({ type: 'create_group', name: name, kind: kind, members: members });
+      ui.toast(kind === 'group' ? 'Создаём группу…' : 'Создаём канал…');
     } else {
       // локальная группа
       const gid = 'g' + U.uid().slice(0, 6);
-      const g = { id: gid, name: v.name.trim(), type: kind, owner: S.s.user, members: [S.s.user].concat(members), createdAt: Date.now() };
+      const g = { id: gid, name: name, type: kind, owner: S.s.user, members: [S.s.user].concat(members), createdAt: Date.now() };
       addGroup(g);
       ui.toast('Группа создана локально (офлайн).');
       TM.chat.open(S.chatIdForGroup(gid));
@@ -181,6 +279,10 @@ TM.chats = (function () {
     const c = S.getChat(id);
     if (c) { c.members = g.members; c.owner = g.owner; S.save(); }
     render();
+    if (openNextOwn && g.owner === S.s.user) {
+      openNextOwn = false;
+      TM.chat.open(id);
+    }
   }
 
   /* ---------- обработчики сервера ---------- */

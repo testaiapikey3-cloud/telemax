@@ -12,7 +12,18 @@ TM.calls = (function () {
   const ui = TM.ui;
   const S = TM.state;
 
-  const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+  /* STUN (свой IP) + TURN-релей (если собеседник за сложным NAT/в другом городе) */
+  const ICE = {
+    iceServers: [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+    ],
+    iceCandidatePoolSize: 2,
+    bundlePolicy: 'max-bundle'
+  };
   const RING_TIMEOUT = 45000;
 
   let host = null;
@@ -23,6 +34,8 @@ TM.calls = (function () {
   let callTimer = null;
   let ringTimer = null;
   let pendingIncoming = null; // {from, close} — входящий вызов, ждёт ответа
+  let pendingIce = [];        // ICE-кандидаты до готовности соединения (иначе теряются)
+  let earlyOffer = null;      // offer пришёл раньше, чем микрофон был готов
 
   /* ---------- история ---------- */
   function addHistory(peer, name, dir, kind, missed) {
@@ -196,7 +209,23 @@ TM.calls = (function () {
     if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
     pc.onicecandidate = e => { if (e.candidate && active) TM.net.send({ type: 'ice', to: active.peer, candidate: e.candidate }); };
     pc.ontrack = e => { if (pc._remote) pc._remote.addTrack(e.track); };
-    pc.onconnectionstatechange = () => { if (pc && ['failed', 'disconnected'].includes(pc.connectionState) && active) hangup(true); };
+    pc.onconnectionstatechange = () => {
+      if (!pc || !active) return;
+      const st = pc.connectionState;
+      if (st === 'failed') { hangup(true); return; }
+      if (st === 'disconnected') {
+        // короткий обрыв не завершаем сразу — даём 8 секунд на восстановление
+        clearTimeout(pc._dcTimer);
+        pc._dcTimer = setTimeout(() => {
+          if (pc && active && (pc.connectionState === 'disconnected' || pc.connectionState === 'failed')) hangup(true);
+        }, 8000);
+      } else if (st === 'connected' || st === 'completed') {
+        clearTimeout(pc._dcTimer);
+      }
+    };
+    pc.oniceconnectionstatechange = () => {
+      if (pc && active && pc.iceConnectionState === 'failed') hangup(true);
+    };
     return pc;
   }
   async function beginCaller() {
@@ -217,6 +246,7 @@ TM.calls = (function () {
       await ensureMedia(active && active.video);
       await createPeer();
       setStatus('Соединение…');
+      if (earlyOffer) { const m = earlyOffer; earlyOffer = null; onOffer(m); }
     } catch (e) {
       ui.toast('Нет доступа к камере/микрофону', 'err');
       TM.net.send({ type: 'reject', to: active.peer });
@@ -224,10 +254,17 @@ TM.calls = (function () {
       if (callUI) { callUI.close(); callUI = null; }
     }
   }
+  function flushIce() {
+    if (!pc || !pc.remoteDescription) return;
+    const list = pendingIce;
+    pendingIce = [];
+    for (const c of list) { try { pc.addIceCandidate(c).catch(() => {}); } catch (_) {} }
+  }
   async function onOffer(m) {
-    if (!pc) return;
+    if (!pc) { earlyOffer = m; return; } // микрофон ещё не готов — обработаем позже
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
+      flushIce();
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       TM.net.send({ type: 'answer', to: m.from, sdp: answer });
@@ -236,9 +273,14 @@ TM.calls = (function () {
   }
   async function onAnswer(m) {
     if (!pc) return;
-    try { await pc.setRemoteDescription(new RTCSessionDescription(m.sdp)); setStatus('Соединено'); startTimer(); } catch (e) { console.warn(e); }
+    try { await pc.setRemoteDescription(new RTCSessionDescription(m.sdp)); flushIce(); setStatus('Соединено'); startTimer(); } catch (e) { console.warn(e); }
   }
-  async function onIce(m) { if (pc) { try { await pc.addIceCandidate(new RTCIceCandidate(m.candidate)); } catch (_) {} } }
+  function onIce(m) {
+    let cand;
+    try { cand = new RTCIceCandidate(m.candidate); } catch (_) { return; }
+    if (!pc || !pc.remoteDescription) { pendingIce.push(cand); if (pendingIce.length > 60) pendingIce.shift(); return; }
+    try { pc.addIceCandidate(cand).catch(() => {}); } catch (_) {}
+  }
 
   /* ---------- завершение ---------- */
   function hangup(silent) {
@@ -251,7 +293,9 @@ TM.calls = (function () {
     clearInterval(callTimer); callTimer = null;
     clearTimeout(ringTimer); ringTimer = null;
     TM.notify.stopRing();
-    if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+    pendingIce = [];
+    earlyOffer = null;
+    if (pc) { try { clearTimeout(pc._dcTimer); pc.close(); } catch (_) {} pc = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     if (active && active.started) {
       const st = S.store();
@@ -264,7 +308,12 @@ TM.calls = (function () {
   /* ---------- сеть ---------- */
   function bindNet() {
     TM.net.on('call', m => { incoming(m); });
-    TM.net.on('accept', m => { if (active && m.from === active.peer && active.direction === 'out') beginCaller(); });
+    TM.net.on('accept', m => {
+      if (active && m.from === active.peer && active.direction === 'out' && !active._began) {
+        active._began = true; // защита от повторного beginCaller
+        beginCaller();
+      }
+    });
     TM.net.on('offer', m => { if (active && m.from === active.peer) onOffer(m); });
     TM.net.on('answer', m => { if (active && m.from === active.peer) onAnswer(m); });
     TM.net.on('ice', m => { if (active && m.from === active.peer) onIce(m); });
