@@ -227,10 +227,27 @@ TM.ui = (function () {
     return (h + 30) % 360;
   }
   function verifiedBadge(user, cls) {
-    const p = TM.state.profileOf(user);
-    if (p && p.verified) return '<span class="vbadge ' + (cls || '') + '" title="Верифицирован">' + icon('verified') + '</span>';
-    const c = TM.state.s.contacts[String(user).toLowerCase()];
-    if (c && c.verified) return '<span class="vbadge ' + (cls || '') + '" title="Верифицирован">' + icon('verified') + '</span>';
+    const badge = t => '<span class="vbadge ' + (cls || '') + '" title="' + t + '">' + icon('verified') + '</span>';
+    // поддерживаются и объекты чатов (каналы/группы/боты), и просто @username
+    if (user && typeof user === 'object') {
+      const ch = user;
+      if (ch.verified) return badge(ch.kind === 'channel' ? 'Верифицированный канал' : ch.kind === 'group' ? 'Верифицированная группа' : 'Верифицирован');
+      if (ch.kind === 'private' && ch.username) return verifiedBadge(ch.username, cls);
+      const gid = String(ch.id || '').replace(/^g_/, '');
+      const g = TM.state.s.groups && TM.state.s.groups[gid];
+      if (g && g.verified) return badge(g.type === 'channel' ? 'Верифицированный канал' : 'Верифицированная группа');
+      return '';
+    }
+    const u = String(user || '').toLowerCase();
+    if (!u) return '';
+    try {
+      const p = TM.state.profileOf(u);
+      if (p && p.verified) return badge('Верифицирован');
+      const c = TM.state.s.contacts && TM.state.s.contacts[u];
+      if (c && c.verified) return badge('Верифицирован');
+    } catch (_) {}
+    const vb = TM.config && TM.config.VERIFIED_BOTS;
+    if (vb && vb[u]) return badge('Официальный бот');
     return '';
   }
 

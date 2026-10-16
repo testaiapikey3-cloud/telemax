@@ -102,7 +102,7 @@ TM.profile = (function () {
       head.innerHTML =
         '<div class="pf-topbar"><button class="icon-btn" id="pg-back">' + ui.icon('back') + '</button></div>' +
         '<div class="pf-avatar">' + ui.avatarHTML(chat.name, '', false, 'xl') + '</div>' +
-        '<div class="pf-name">' + U.esc(chat.name) + '</div>' +
+        '<div class="pf-name">' + U.esc(chat.name) + ui.verifiedBadge(chat) + '</div>' +
         '<div class="pf-user">' + (chat.kind === 'channel' ? 'Канал' : 'Группа') + ' • ' + members.length + ' участников</div>';
       node.appendChild(head);
       const list = U.el('div', 'pf-card');
@@ -113,6 +113,19 @@ TM.profile = (function () {
       }).join('');
       node.appendChild(list);
       U.$$('.pf-member', list).forEach(r => r.onclick = () => open(r.dataset.u));
+
+      // админ может выдавать/снимать галочку каналам и группам
+      if (S.myRole() >= 4) {
+        const vbtn = U.el('button', 'btn btn-ghost btn-big', chat.verified ? '✓ Снять галочку верификации' : '✓ Верифицировать' + (chat.kind === 'channel' ? ' канал' : ' группу'));
+        vbtn.style.marginTop = '12px';
+        vbtn.onclick = () => {
+          if (chat.official && chat.verified) { ui.toast('Официальную галочку снять нельзя'); return; }
+          TM.net.send({ type: 'group_verify', id: String(chat.id || '').replace(/^g_/, ''), verified: !chat.verified });
+          ui.toast(chat.verified ? 'Галочка снята' : 'Галочка выдана ✓');
+          handle.close();
+        };
+        node.appendChild(vbtn);
+      }
       head.querySelector('#pg-back').onclick = () => handle.close();
     });
   }

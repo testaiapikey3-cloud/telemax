@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.2.2-web';
+const VERSION = '1.2.3-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -69,6 +69,22 @@ if (!state.vapid || !state.vapid.publicKey || !state.vapid.privateKey) {
   state.vapid = push.generateVapidKeys();
   save();
 }
+
+/* ---------- официальный канал «TeleMAX Новости» (владелец mislit_tech) ---------- */
+const OFFICIAL_CHANNEL_ID = 'gtelemax';
+function ensureOfficialChannel() {
+  let g = state.groups[OFFICIAL_CHANNEL_ID];
+  if (!g) {
+    g = { id: OFFICIAL_CHANNEL_ID, name: 'TeleMAX Новости', type: 'channel', owner: 'mislit_tech', admins: [], members: [], verified: true, official: true, createdAt: Date.now() };
+    state.groups[OFFICIAL_CHANNEL_ID] = g;
+  }
+  g.name = g.name || 'TeleMAX Новости';
+  g.owner = 'mislit_tech'; g.admins = [];   // публиковать может только владелец
+  g.verified = true; g.official = true;     // официальный — галочка всегда
+  for (const u of Object.keys(state.accounts)) if (!g.members.includes(u)) g.members.push(u);
+  dirty = true; save();
+}
+ensureOfficialChannel();
 
 /* ------------------------------ утилиты ------------------------------ */
 const clean = v => String(v || '').replace(/^@/, '').trim().toLowerCase();
@@ -434,7 +450,9 @@ function registerSocket(a, ws, req, newDevice, resumeToken) {
   send(ws, { type: 'registered', user: u, account: pubAccount(a), online: true, resumeToken: resumeToken || '' });
   send(ws, { type: 'presence_snapshot', items: state.presence });
   send(ws, { type: 'contacts_snapshot', items: contactList() });
-  send(ws, { type: 'groups_snapshot', items: Object.values(state.groups).filter(g => g.members.includes(u)) });
+  const oc = state.groups[OFFICIAL_CHANNEL_ID];
+  if (oc && !oc.members.includes(u)) { oc.members.push(u); dirty = true; save(); }
+  send(ws, { type: 'groups_snapshot', items: Object.values(state.groups).filter(g => g.members.includes(u) || g.official) });
   send(ws, { type: 'broadcast_state', text: state.broadcast.text, time: state.broadcast.time });
 
   const q = state.pending[u] || [];
@@ -741,6 +759,7 @@ wss.on('connection', (ws, req) => {
     }
     if (type === 'group_leave') {
       const g = state.groups[String(m.id || '')];
+      if (g && g.official) return send(ws, { type: 'error', message: 'От официального канала нельзя отписаться' });
       if (g && g.members.includes(user)) {
         g.members = g.members.filter(x => x !== user); dirty = true;
         if (!g.members.length && g.owner === user) delete state.groups[g.id];
@@ -748,6 +767,15 @@ wss.on('connection', (ws, req) => {
         save();
       }
       return;
+    }
+    if (type === 'group_verify') {
+      const g = state.groups[String(m.id || '')];
+      if (!g) return send(ws, { type: 'error', message: 'Группа или канал не найдены' });
+      if (roleFor(state.accounts[user]) < 4) return send(ws, { type: 'error', message: 'Нужны права администратора (уровень 4+)' });
+      if (g.official && !m.verified) return send(ws, { type: 'error', message: 'Официальный канал нельзя лишить галочки' });
+      g.verified = !!m.verified; dirty = true; save();
+      broadcastAll({ type: 'group_update', group: g });
+      return send(ws, { type: 'group_verified', group: g });
     }
 
     /* ---------- кошелёк / подарки / NFT ---------- */
@@ -876,6 +904,7 @@ wss.on('connection', (ws, req) => {
             muted: items.filter(x => x.muted).length, admins: items.filter(x => x.role >= 4).length
           },
           reports: state.reports.slice(0, 100),
+          verifiedGroups: Object.values(state.groups).filter(g => g.verified).map(g => ({ id: g.id, name: g.name, type: g.type, owner: g.owner })),
           server: { version: VERSION, uptimeSec: Math.floor((now() - STARTED) / 1000), sockets: sockets.size }
         });
       }

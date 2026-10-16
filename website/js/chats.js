@@ -83,6 +83,12 @@ TM.chats = (function () {
     head.querySelector('#ch-new').onclick = newChatSheet;
   }
 
+  function isBotChat(c) {
+    if (!c || c.kind !== 'private' || !c.username) return false;
+    if (TM.config.BOT_USERNAMES[c.username]) return true;
+    return (S.store().bots || []).some(b => b.username === c.username);
+  }
+
   function chatRow(c) {
     const row = U.el('div', 'chat-row' + (S.s.activeChat === c.id ? ' active' : ''));
     const online = c.kind === 'private' && S.isOnline(c.username);
@@ -91,8 +97,8 @@ TM.chats = (function () {
       ui.avatarHTML(c.name, c.avatar, online, 'md') +
       '<div class="cr-main">' +
         '<div class="cr-top"><span class="cr-name">' + U.esc(c.name || c.username) + '</span>' +
-          (c.kind === 'channel' ? '<span class="cr-kind">канал</span>' : c.kind === 'group' ? '<span class="cr-kind">группа</span>' : '') +
-          ui.verifiedBadge(c.username) +
+          (c.kind === 'channel' ? '<span class="cr-kind">канал</span>' : c.kind === 'group' ? '<span class="cr-kind">группа</span>' : isBotChat(c) ? '<span class="cr-kind">бот</span>' : '') +
+          ui.verifiedBadge(c) +
           '<span class="cr-time">' + U.timeHM(c.lastTime) + '</span>' +
         '</div>' +
         '<div class="cr-bottom">' +
@@ -277,7 +283,16 @@ TM.chats = (function () {
     const id = S.chatIdForGroup(g.id);
     S.createChat({ id, kind: g.type === 'channel' ? 'channel' : 'group', username: '', name: g.name, members: g.members, owner: g.owner });
     const c = S.getChat(id);
-    if (c) { c.members = g.members; c.owner = g.owner; S.save(); }
+    if (c) {
+      c.members = g.members; c.owner = g.owner;
+      c.verified = !!g.verified; c.official = !!g.official;
+      // приветствие официального канала — один раз на устройство
+      if (g.official && !c.messages.length) S.addMessage(id, {
+        id: U.uid(), type: 'text', mine: false, from: 'mislit_tech', time: Date.now(), status: 'read',
+        text: 'Добро пожаловать в официальный канал TeleMAX Новости 💛\n\nЗдесь выходят новости и обновления мессенджера. Канал ведёт @mislit_tech — подписка у всех пользователей включается автоматически.'
+      });
+      S.save();
+    }
     render();
     if (openNextOwn && g.owner === S.s.user) {
       openNextOwn = false;
@@ -305,11 +320,21 @@ TM.chats = (function () {
       render();
     });
     TM.net.on('group_created', m => { addGroup(m.group); });
+    TM.net.on('groups_snapshot', m => {
+      if (!S.s.user) return;
+      (m.items || []).forEach(g => { try { addGroup(g); } catch (_) {} });
+    });
     TM.net.on('presence_snapshot', m => { S.s.presence = m.items || {}; if (TM.app.tab === 'chats') render(); });
     TM.net.on('group_update', m => {
       S.s.groups[m.group.id] = m.group;
       const c = S.getChat(S.chatIdForGroup(m.group.id));
-      if (c) { c.members = m.group.members; S.save(); }
+      if (c) {
+        c.members = m.group.members; c.owner = m.group.owner;
+        if (m.group.name) c.name = m.group.name;
+        c.verified = !!m.group.verified; c.official = !!m.group.official;
+        S.save();
+      }
+      render();
     });
   }
 

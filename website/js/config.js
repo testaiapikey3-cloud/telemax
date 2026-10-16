@@ -7,7 +7,7 @@ window.TM = window.TM || {};
 TM.config = (function () {
   'use strict';
 
-  const VERSION = '1.2.2';
+  const VERSION = '1.2.3';
   const APP_NAME = 'TeleMAX';
 
   // Роли 0–5 (как в Android-версии)
@@ -125,5 +125,8 @@ TM.config = (function () {
 
   const BOT_USERNAMES = { telemaxbot: 'TeleMAX Bot', botrast: 'BotRast', telemany: 'TeleMany', telemaxai: 'TeleMAX AI' };
 
-  return { VERSION, APP_NAME, ROLES, LEVEL5_USERNAMES, GIFTS, NFT_CATALOG, PREMIUM_PRICE, WALLPAPERS, ACCENTS, PLUGINS, LIMITS, BOT_USERNAMES };
+  // Официальные боты — с галочкой верификации
+  const VERIFIED_BOTS = { telemaxbot: 1, botrast: 1, telemany: 1, telemaxai: 1 };
+
+  return { VERSION, APP_NAME, ROLES, LEVEL5_USERNAMES, GIFTS, NFT_CATALOG, PREMIUM_PRICE, WALLPAPERS, ACCENTS, PLUGINS, LIMITS, BOT_USERNAMES, VERIFIED_BOTS };
 })();

@@ -272,9 +272,18 @@ TM.admin = (function () {
   function verifyList() {
     snapshot(sn => {
       const v = sn.accounts.filter(a => a.verified);
+      const vg = sn.verifiedGroups || [];
+      const bots = Object.keys((TM.config && TM.config.VERIFIED_BOTS) || {});
+      let html = v.length
+        ? v.map(a => '<div class="ad-line"><span>' + U.esc(a.name) + ' @' + a.user + '</span><b>' + ui.icon('verified') + '</b></div>').join('')
+        : '<div class="dim">Галочек у людей пока нет.</div>';
+      html += '<div class="form-label">Каналы и группы</div>' + (vg.length
+        ? vg.map(g => '<div class="ad-line"><span>' + U.esc(g.name) + ' • ' + (g.type === 'channel' ? 'канал' : 'группа') + '</span><b>' + ui.icon('verified') + '</b></div>').join('')
+        : '<div class="dim">Нет</div>');
+      html += '<div class="form-label">Боты</div>' + bots.map(b => '<div class="ad-line"><span>@' + U.esc(b) + '</span><b>' + ui.icon('verified') + '</b></div>').join('');
       ui.modal({
-        title: 'Верифицированные (' + v.length + ')',
-        body: v.length ? v.map(a => '<div class="ad-line"><span>' + U.esc(a.name) + ' @' + a.user + '</span><b>' + ui.icon('verified') + '</b></div>').join('') : '<div class="dim">Галочек пока нет.</div>',
+        title: 'Верифицированные (' + (v.length + vg.length + bots.length) + ')',
+        body: html,
         actions: [{ label: 'Закрыть', primary: true }]
       });
     });

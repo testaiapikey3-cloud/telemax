@@ -68,7 +68,7 @@ TM.chat = (function () {
       '<button class="icon-btn" id="cc-back">' + ui.icon('back') + '</button>' +
       ui.avatarHTML(c.name, c.avatar || avatarOf(c), c.kind === 'private' && S.isOnline(c.username), 'sm') +
       '<div class="cc-main" id="cc-open-profile">' +
-        '<div class="cc-name">' + U.esc(c.name || c.username) + ui.verifiedBadge(c.username) + '</div>' +
+        '<div class="cc-name">' + U.esc(c.name || c.username) + ui.verifiedBadge(c) + '</div>' +
         '<div class="cc-status" id="cc-status">' + U.esc(status) + '</div>' +
       '</div>' +
       (showCall ? '<button class="icon-btn" id="cc-call-a" title="Аудиозвонок">' + ui.icon('calls') + '</button>' +
@@ -114,7 +114,7 @@ TM.chat = (function () {
     }
     items.push({ icon: 'user', label: 'Профиль', onClick: () => openPeerProfile(c) });
     items.push({ icon: 'trash', label: 'Очистить историю', onClick: async () => { if (await ui.confirm('Очистить историю?', 'Сообщения будут удалены.')) { c.messages = []; S.save(); renderMessages(); } } });
-    if (c.kind !== 'private') items.push({ icon: 'logout', label: c.kind === 'channel' ? 'Покинуть канал' : 'Покинуть группу', danger: true, onClick: async () => { if (await ui.confirm('Выйти?', 'Вы покинете «' + c.name + '»')) { TM.net.send({ type: 'group_leave', id: c.id.slice(2) }); S.removeChat(c.id); h.close(); TM.chats.render(); } } });
+    if (c.kind !== 'private' && !c.official) items.push({ icon: 'logout', label: c.kind === 'channel' ? 'Покинуть канал' : 'Покинуть группу', danger: true, onClick: async () => { if (await ui.confirm('Выйти?', 'Вы покинете «' + c.name + '»')) { TM.net.send({ type: 'group_leave', id: c.id.slice(2) }); S.removeChat(c.id); h.close(); TM.chats.render(); } } });
     ui.sheet({ title: c.name, items });
   }
 
@@ -571,6 +571,7 @@ TM.chat = (function () {
       const chatId = S.chatIdForGroup(gid);
       const g = S.s.groups[gid];
       const c = S.getChat(chatId) || S.createChat({ id: chatId, kind: g && g.type === 'channel' ? 'channel' : 'group', name: (g && g.name) || m.groupName || 'Группа', members: g ? g.members : [] });
+      if (g) { c.verified = !!g.verified; c.official = !!g.official; if (g.name) c.name = g.name; if (g.members) c.members = g.members; }
       if (m.id && c.messages.some(x => x.id === m.id || (m.clientId && x.id === m.clientId))) return false;
       const msg = toLocal(m, m.from === S.s.user);
       S.addMessage(c.id, msg);

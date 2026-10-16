@@ -84,7 +84,8 @@ TM.state = (function () {
   function chatIdForGroup(gid) { return 'g_' + gid; }
   function getChat(id) { return store().chats[id] || null; }
   function allChats() {
-    return Object.values(store().chats).sort((a, b) => (b.lastTime || 0) - (a.lastTime || 0));
+    // официальный канал всегда сверху
+    return Object.values(store().chats).sort((a, b) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || (b.lastTime || 0) - (a.lastTime || 0));
   }
   function createChat(opts) {
     const st = store();
