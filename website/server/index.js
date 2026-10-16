@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.2.5-web';
+const VERSION = '1.2.6-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -39,7 +39,9 @@ function siteFiles() {
   return files;
 }
 /* системные строки push-уведомлений (тоже переводятся) */
-const PUSH_UI = ['Фото', 'Видео', 'Видеосообщение', 'Голосовое сообщение', 'Файл', 'Подарок', 'Опрос', 'Новое сообщение', 'звонит вам', '📞 Входящий звонок — TeleMAX', '📹 Видеозвонок — TeleMAX', '🆘 Запрос поддержки — TeleMAX'];
+const PUSH_UI = ['Фото', 'Видео', 'Видеосообщение', 'Голосовое сообщение', 'Файл', 'Подарок', 'Опрос', 'Стикер', 'Новое сообщение', 'звонит вам', '📞 Входящий звонок — TeleMAX', '📹 Видеозвонок — TeleMAX', '🆘 Запрос поддержки — TeleMAX'];
+/* допустимые реакции (как в MAX) */
+const REACTIONS = ['👍', '❤️', '🔥', '😂', '😮', '😢', '🎉', '👎'];
 
 /* ------------------------------ состояние ------------------------------ */
 const state = {
@@ -120,10 +122,13 @@ function readCookie(req, name) {
 function previewOf(m, T) {
   T = T || (s => s);
   const t = String(m.messageType || m.type || 'text');
-  if (t === 'image') return '🖼 ' + T('Фото');
-  if (t === 'video') return m.circle ? '🎥 ' + T('Видеосообщение') : '🎬 ' + T('Видео');
+  const cap = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+  const withCap = s => (cap ? s + ' — ' + cap : s);
+  if (t === 'image') return withCap('🖼 ' + T('Фото'));
+  if (t === 'video') return m.circle ? '🎥 ' + T('Видеосообщение') : withCap('🎬 ' + T('Видео'));
   if (t === 'audio') return '🎤 ' + T('Голосовое сообщение');
-  if (t === 'file') return '📄 ' + (m.fileName || T('Файл'));
+  if (t === 'sticker') return '🎨 ' + T('Стикер');
+  if (t === 'file') return withCap('📄 ' + (m.fileName || T('Файл')));
   if (t === 'gift') return '🎁 ' + (m.text || T('Подарок'));
   if (t === 'poll') return '📊 ' + T('Опрос') + ': ' + String((m.poll && m.poll.question) || '').slice(0, 100);
   const text = String(m.text || '').replace(/\s+/g, ' ').trim();
@@ -759,6 +764,31 @@ wss.on('connection', (ws, req) => {
           histDel(g.members, delId);
         } else histDel([user], delId);
       } else histDel([user, to], delId);
+      return;
+    }
+    if (type === 'reaction') {
+      const emoji = String(m.emoji || '').slice(0, 12);
+      if (REACTIONS.indexOf(emoji) < 0) return send(ws, { type: 'error', message: 'Недопустимая реакция' });
+      const msgId = String(m.msgId || '').slice(0, 80);
+      if (!msgId) return;
+      const on = !!m.on;
+      const rawTo = String(m.to || '');
+      const base = { type: 'reaction', from: user, chatId: String(m.chatId || ''), msgId, emoji, on, serverTime: now() };
+      if (rawTo.startsWith('g:')) {
+        const g = state.groups[rawTo.slice(2)];
+        if (!g || !g.members.includes(user)) return send(ws, { type: 'error', message: 'Группа не найдена' });
+        for (const mem of g.members) {
+          const pay = Object.assign({ to: rawTo }, base);
+          if (!broadcastUser(mem, pay)) queueFor(mem, pay);
+        }
+      } else {
+        const to = clean(m.to);
+        if (!to || !state.accounts[to]) return;
+        const pay = Object.assign({ to }, base);
+        if (!broadcastUser(to, pay)) queueFor(to, pay);
+        /* свои другие устройства тоже видят реакцию */
+        broadcastUser(user, Object.assign({ to }, base));
+      }
       return;
     }
     if (type === 'poll_vote') {

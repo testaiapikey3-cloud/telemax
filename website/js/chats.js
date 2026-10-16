@@ -22,10 +22,13 @@ TM.chats = (function () {
     if (!m) return 'Новый чат';
     const my = m.mine ? 'Вы: ' : '';
     const t = m.type;
-    if (t === 'image') return my + '🖼 Фото';
-    if (t === 'video') return my + (m.circle ? '🎥 Кружок' : '🎬 Видео');
+    const cap = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const withCap = s => (cap ? s + ' · ' + cap : s);
+    if (t === 'image') return my + withCap('🖼 Фото');
+    if (t === 'video') return my + (m.circle ? '🎥 Кружок' : withCap('🎬 Видео'));
     if (t === 'audio') return my + '🎤 Голосовое';
-    if (t === 'file') return my + '📄 ' + (m.fileName || 'Файл');
+    if (t === 'sticker') return my + '🎨 Стикер';
+    if (t === 'file') return my + '📄 ' + withCap(m.fileName || 'Файл');
     if (t === 'gift') return my + '🎁 ' + (m.text || 'Подарок');
     if (t === 'poll') return my + '📊 ' + ((m.poll && m.poll.question) || 'Опрос');
     return my + (m.text || '');

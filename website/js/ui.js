@@ -46,6 +46,7 @@ TM.ui = (function () {
     help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9.3a2.9 2.9 0 0 1 5.6.7c0 1.9-2.7 2.2-2.7 3.7"/><path d="M12 16.8h.01"/></svg>',
     logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>',
     play: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4.5v15l13-7.5z"/></svg>',
+    smile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.2 14.3a4.8 4.8 0 0 0 7.6 0"/><circle cx="9" cy="9.7" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="9.7" r="1" fill="currentColor" stroke="none"/></svg>',
     pause: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
     download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
     upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 8l5-5 5 5M12 3v12"/></svg>',
@@ -161,6 +162,8 @@ TM.ui = (function () {
     const back = U.el('div', 'sheet-back');
     const sh = U.el('div', 'sheet');
     if (opts.title) sh.appendChild(U.el('div', 'sheet-title', U.esc(opts.title)));
+    if (typeof opts.top === 'function') { const t = opts.top(close); if (t) sh.appendChild(t); }
+    else if (opts.top) sh.appendChild(opts.top);
     (opts.items || []).forEach(it => {
       if (it.header) { sh.appendChild(U.el('div', 'sheet-header', U.esc(it.header))); return; }
       const row = U.el('div', 'sheet-item' + (it.danger ? ' danger' : '') + (it.active ? ' active' : ''));

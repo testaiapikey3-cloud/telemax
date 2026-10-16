@@ -7,7 +7,7 @@ window.TM = window.TM || {};
 TM.config = (function () {
   'use strict';
 
-  const VERSION = '1.2.5';
+  const VERSION = '1.2.6';
   const APP_NAME = 'TeleMAX';
 
   // Роли 0–5 (как в Android-версии)

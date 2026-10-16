@@ -18,19 +18,65 @@ TM.attach = (function () {
     inp.onchange = async () => {
       const f = inp.files && inp.files[0];
       if (!f) return;
-      await uploadAndSend(chat, f, kind);
+      const cap = await askCaption(f, kind);
+      if (cap === null) return;
+      await uploadAndSend(chat, f, kind, 0, cap);
     };
     inp.click();
   }
 
-  async function uploadAndSend(chat, file, kind, duration) {
+  /* подпись к вложению: видео/фото и текст — одним сообщением (как в Telegram) */
+  function askCaption(file, kind) {
+    const url = URL.createObjectURL(file);
+    const wrap = U.el('div', 'cap-wrap');
+    if (kind === 'image') {
+      const im = U.el('img', 'cap-preview');
+      im.src = url;
+      wrap.appendChild(im);
+    } else if (kind === 'video') {
+      const v = U.el('video', 'cap-preview');
+      v.src = url;
+      v.controls = true;
+      v.playsInline = true;
+      v.preload = 'metadata';
+      wrap.appendChild(v);
+    } else {
+      wrap.appendChild(U.el('div', 'cap-file', U.esc(file.name || 'Файл') + ' · ' + U.bytes(file.size)));
+    }
+    const ta = U.el('textarea', 'cap-input');
+    ta.rows = 2;
+    ta.maxLength = 900;
+    const what = kind === 'video' ? 'видео' : kind === 'image' ? 'фото' : 'файлу';
+    ta.placeholder = 'Подпись к ' + what + ' (необязательно)…';
+    wrap.appendChild(ta);
+    /* текст, набранный в поле ввода, сразу становится подписью */
+    const typed = U.$('#cp-input');
+    if (typed && typed.value.trim()) {
+      ta.value = typed.value.trim().slice(0, 900);
+      typed.value = '';
+      typed.dispatchEvent(new Event('input'));
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return ui.modal({
+      title: 'Отправить ' + what,
+      body: wrap,
+      actions: [
+        { label: 'Отправить', primary: true, onClick: () => ta.value.trim() },
+        { label: 'Без подписи', onClick: () => '' },
+        { label: 'Отмена', value: null }
+      ]
+    });
+  }
+
+  async function uploadAndSend(chat, file, kind, duration, text) {
     const type = kind === 'image' || kind === 'video' || kind === 'file' ? kind : 'file';
+    const caption = String(text || '').slice(0, 900);
     if (TM.net.isOn()) {
       const t = showProgress(file.name);
       try {
         const r = await TM.net.upload(file, S.s.user, p => t.update(p));
         t.close();
-        TM.chat.sendMessage(chat, { type, uri: r.url, fileName: r.name, fileSize: r.size, duration });
+        TM.chat.sendMessage(chat, { type, uri: r.url, fileName: r.name, fileSize: r.size, duration, text: caption });
         S.store().analytics.mediaSent = (S.store().analytics.mediaSent || 0) + 1;
         S.save();
       } catch (e) {
@@ -42,7 +88,7 @@ TM.attach = (function () {
     // офлайн
     if (file.size <= TM.config.LIMITS.LOCAL_MEDIA_MAX) {
       const dataUrl = await U.readFile(file);
-      TM.chat.sendMessage(chat, { type, uri: dataUrl, fileName: file.name, fileSize: file.size, duration });
+      TM.chat.sendMessage(chat, { type, uri: dataUrl, fileName: file.name, fileSize: file.size, duration, text: caption });
       ui.toast('Офлайн: файл сохранён на устройстве', 'warn');
     } else {
       ui.modal({

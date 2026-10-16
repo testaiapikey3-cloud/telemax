@@ -221,12 +221,18 @@ TM.chat = (function () {
       f.innerHTML = ui.icon('file') + '<div class="mf-main"><div class="mf-name">' + U.esc(m.fileName || 'Файл') + '</div><div class="mf-size">' + U.bytes(m.fileSize) + '</div></div>' + ui.icon('download');
       f.onclick = () => { const a = document.createElement('a'); a.href = U.safeUrl(m.uri); a.download = m.fileName || 'file'; a.target = '_blank'; a.click(); };
       bubble.appendChild(f);
+      if (m.text) bubble.appendChild(U.el('div', 'msg-caption', U.esc(m.text)));
     } else if (m.type === 'gift') {
       const g = U.el('div', 'msg-gift');
       g.innerHTML = '<div class="mg-emoji">🎁</div><div class="mg-text">' + U.esc(m.text || 'Подарок') + '</div>';
       bubble.appendChild(g);
     } else if (m.type === 'poll' && m.poll) {
       bubble.appendChild(TM.polls.render(m, c, () => S.save()));
+    } else if (m.type === 'sticker') {
+      const im = U.el('img', 'msg-sticker');
+      im.src = U.safeUrl(m.uri);
+      im.loading = 'lazy';
+      bubble.appendChild(im);
     } else {
       bubble.appendChild(U.el('div', 'msg-text', linkify(U.esc(m.text || ''))));
     }
@@ -236,6 +242,19 @@ TM.chat = (function () {
     bubble.appendChild(foot);
 
     wrap.appendChild(bubble);
+    // реакции под сообщением (как в MAX)
+    const rks = m.reactions ? Object.keys(m.reactions).filter(k => (m.reactions[k] || []).length) : [];
+    if (rks.length) {
+      const bar = U.el('div', 'react-bar');
+      rks.sort((a, b) => m.reactions[b].length - m.reactions[a].length).slice(0, 6).forEach(e => {
+        const chip = U.el('button', 'react-chip' + (m.reactions[e].indexOf(S.s.user) >= 0 ? ' mine' : ''));
+        chip.innerHTML = '<span>' + e + '</span><b>' + m.reactions[e].length + '</b>';
+        chip.addEventListener('pointerdown', ev => ev.stopPropagation());
+        chip.onclick = ev => { ev.stopPropagation(); toggleReaction(c, m, e); };
+        bar.appendChild(chip);
+      });
+      wrap.appendChild(bar);
+    }
     attachMsgMenu(wrap, m, c);
     return wrap;
   }
@@ -244,10 +263,41 @@ TM.chat = (function () {
     if (m.type === 'image') return '🖼 Фото';
     if (m.type === 'video') return m.circle ? '🎥 Кружок' : '🎬 Видео';
     if (m.type === 'audio') return '🎤 Голосовое';
+    if (m.type === 'sticker') return '🎨 Стикер';
     if (m.type === 'file') return '📄 ' + (m.fileName || 'Файл');
     if (m.type === 'poll') return '📊 Опрос';
     if (m.type === 'gift') return '🎁 ' + (m.text || 'Подарок');
     return m.text || '';
+  }
+
+  /* ---------- реакции (как в MAX) ---------- */
+  const REACTIONS = ['👍', '❤️', '🔥', '😂', '😮', '😢', '🎉', '👎'];
+
+  function toggleReaction(c, m, emoji) {
+    if (!m || m.type === 'system' || !S.s.user) return;
+    m.reactions = m.reactions || {};
+    const list = m.reactions[emoji] || (m.reactions[emoji] = []);
+    const i = list.indexOf(S.s.user);
+    const on = i < 0;
+    if (on) list.push(S.s.user); else list.splice(i, 1);
+    if (!list.length) delete m.reactions[emoji];
+    S.save();
+    if (cur === c.id) renderMessages();
+    TM.chats.render();
+    if (TM.net.isOn()) TM.net.send({
+      type: 'reaction', to: c.kind === 'private' ? c.username : 'g:' + c.id.slice(2),
+      chatId: c.id, msgId: m.id, emoji: emoji, on: on
+    });
+  }
+
+  function applyReaction(m, emoji, by, on) {
+    if (!m) return;
+    m.reactions = m.reactions || {};
+    const list = m.reactions[emoji] || (m.reactions[emoji] = []);
+    const i = list.indexOf(by);
+    if (on && i < 0) list.push(by);
+    if (!on && i >= 0) list.splice(i, 1);
+    if (!list.length) delete m.reactions[emoji];
   }
 
   /* видеокружок: круглый плеер с кольцом прогресса */
@@ -320,7 +370,7 @@ TM.chat = (function () {
     wrap.addEventListener('pointermove', () => { moved = true; clearTimeout(timer); });
     wrap.addEventListener('pointerup', () => clearTimeout(timer));
     wrap.addEventListener('pointerleave', () => clearTimeout(timer));
-    wrap.addEventListener('dblclick', () => setReply(m));
+    wrap.addEventListener('dblclick', () => toggleReaction(c, m, '❤️'));
   }
 
   function msgMenu(m, c) {
@@ -333,7 +383,19 @@ TM.chat = (function () {
       TM.net.send({ type: 'delete_message', id: m.id, chatId: c.id, to: c.kind === 'private' ? c.username : 'g:' + c.id.slice(2) });
       renderMessages(); TM.chats.render();
     } });
-    ui.sheet({ items });
+    ui.sheet({
+      items,
+      top: close => {
+        const strip = U.el('div', 'react-strip');
+        REACTIONS.forEach(e => {
+          const has = !!(m.reactions && (m.reactions[e] || []).indexOf(S.s.user) >= 0);
+          const b = U.el('button', 'react-btn' + (has ? ' on' : ''), e);
+          b.onclick = () => { toggleReaction(c, m, e); close(); };
+          strip.appendChild(b);
+        });
+        return strip;
+      }
+    });
   }
 
   function setReply(m) {
@@ -373,6 +435,7 @@ TM.chat = (function () {
       '<div class="composer">' +
         '<button class="icon-btn" id="cp-attach" title="Прикрепить">' + ui.icon('attach') + '</button>' +
         '<button class="icon-btn" id="cp-circle" title="Видеокружок">' + ui.icon('camera') + '</button>' +
+        '<button class="icon-btn" id="cp-stk" title="Стикеры">' + ui.icon('smile') + '</button>' +
         '<textarea id="cp-input" rows="1" placeholder="Сообщение..."></textarea>' +
         '<button class="icon-btn" id="cp-mic">' + ui.icon('mic') + '</button>' +
         '<button class="send-btn" id="cp-send" style="display:none">' + ui.icon('send') + '</button>' +
@@ -398,6 +461,7 @@ TM.chat = (function () {
     micBtn.onclick = () => toggleRecord(c);
     box.querySelector('#cp-attach').onclick = () => attachSheet(c);
     box.querySelector('#cp-circle').onclick = () => TM.circle.record(c);
+    box.querySelector('#cp-stk').onclick = () => TM.stickers.open(c);
     box.querySelector('#rec-send').onclick = () => stopRecord(c, false);
     box.querySelector('#rec-cancel').onclick = () => stopRecord(c, true);
   }
@@ -547,6 +611,18 @@ TM.chat = (function () {
       TM.app.updateTabBadge();
       if (cur) renderMessages();
       ui.toast('☁️ Синхронизация: подгружено с сервера ' + added + ' сообщ.', 'info');
+    });
+    TM.net.on('reaction', m => {
+      if (!S.s.user || !m || !m.msgId || !m.emoji) return;
+      let c = S.getChat(String(m.chatId || ''));
+      if (!c && String(m.to || '').startsWith('g:')) c = S.getChat(S.chatIdForGroup(String(m.to).slice(2)));
+      if (!c && m.from) c = S.getChat(S.chatIdForUser(m.from));
+      if (!c) return;
+      const msg = c.messages.find(x => x.id === m.msgId);
+      if (!msg || msg.type === 'system') return;
+      applyReaction(msg, String(m.emoji), m.from || '', !!m.on);
+      S.save();
+      if (cur === c.id) renderMessages();
     });
     TM.net.on('message_accepted', m => {
       if (!m.clientId) return;
