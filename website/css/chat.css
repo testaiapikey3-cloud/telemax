@@ -225,3 +225,5 @@
 .mc-play { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: grid; place-items: center; transition: opacity .2s; pointer-events: none; }
 .mc-play .ic { width: 26px; height: 26px; padding: 14px; box-sizing: content-box; border-radius: 50%; background: rgba(0,0,0,.42); color: #fff; }
 .msg-circle.playing .mc-play { opacity: 0; }
+.mc-fail { display: none; position: absolute; top: 0; right: 0; bottom: 0; left: 0; place-items: center; border-radius: 50%; background: #000; color: var(--gray-light); font-size: 12.5px; text-align: center; cursor: pointer; padding: 20px; box-sizing: border-box; }
+.msg-circle.failed .mc-fail { display: grid; }

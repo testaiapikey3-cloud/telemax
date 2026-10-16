@@ -258,7 +258,7 @@ TM.chat = (function () {
     const v = U.el('video', 'mc-v');
     v.src = U.safeUrl(m.uri);
     v.playsInline = true;
-    v.preload = 'metadata';
+    v.preload = 'auto';
     clip.appendChild(v);
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('viewBox', '0 0 100 100');
@@ -276,7 +276,17 @@ TM.chat = (function () {
     svg.appendChild(track); svg.appendChild(prog);
     const play = U.el('div', 'mc-play');
     play.innerHTML = ui.icon('play');
-    box.appendChild(clip); box.appendChild(svg); box.appendChild(play);
+    const fail = U.el('div', 'mc-fail', 'Видео недоступно');
+    fail.onclick = e => {
+      e.stopPropagation();
+      const a = document.createElement('a');
+      a.href = U.safeUrl(m.uri); a.download = m.fileName || 'video.webm'; a.target = '_blank';
+      a.click();
+    };
+    box.appendChild(clip); box.appendChild(svg); box.appendChild(play); box.appendChild(fail);
+    // показываем первый кадр сразу после загрузки метаданных
+    v.onloadedmetadata = () => { try { if (!v.currentTime) v.currentTime = 0.01; } catch (_) {} };
+    v.onerror = () => box.classList.add('failed');
     v.ontimeupdate = () => {
       const d = v.duration || 0;
       prog.style.strokeDashoffset = String(CIRC * (1 - (d ? v.currentTime / d : 0)));
@@ -361,7 +371,8 @@ TM.chat = (function () {
       '<div class="reply-bar" id="reply-bar"></div>' +
       '<div class="rec-bar" id="rec-bar" style="display:none"><span class="rec-dot"></span><span id="rec-time">0:00</span><span class="rec-hint">идёт запись…</span><button class="btn btn-primary btn-sm" id="rec-send">Отправить</button><button class="btn btn-ghost btn-sm" id="rec-cancel">Отмена</button></div>' +
       '<div class="composer">' +
-        '<button class="icon-btn" id="cp-attach">' + ui.icon('attach') + '</button>' +
+        '<button class="icon-btn" id="cp-attach" title="Прикрепить">' + ui.icon('attach') + '</button>' +
+        '<button class="icon-btn" id="cp-circle" title="Видеокружок">' + ui.icon('camera') + '</button>' +
         '<textarea id="cp-input" rows="1" placeholder="Сообщение..."></textarea>' +
         '<button class="icon-btn" id="cp-mic">' + ui.icon('mic') + '</button>' +
         '<button class="send-btn" id="cp-send" style="display:none">' + ui.icon('send') + '</button>' +
@@ -386,6 +397,7 @@ TM.chat = (function () {
     sendBtn.onclick = () => sendText(c);
     micBtn.onclick = () => toggleRecord(c);
     box.querySelector('#cp-attach').onclick = () => attachSheet(c);
+    box.querySelector('#cp-circle').onclick = () => TM.circle.record(c);
     box.querySelector('#rec-send').onclick = () => stopRecord(c, false);
     box.querySelector('#rec-cancel').onclick = () => stopRecord(c, true);
   }
@@ -463,7 +475,6 @@ TM.chat = (function () {
       items: [
         { icon: 'image', label: 'Фото', onClick: () => TM.attach.pick(c, 'image') },
         { icon: 'video', label: 'Видео', onClick: () => TM.attach.pick(c, 'video') },
-        { icon: 'camera', label: 'Видеокружок', onClick: () => TM.circle.record(c) },
         { icon: 'file', label: 'Файл', onClick: () => TM.attach.pick(c, 'file') },
         { icon: 'poll', label: 'Опрос', onClick: () => TM.polls.composer(c, sendMessage) },
         { icon: 'gift', label: 'Подарок', onClick: () => TM.gifts.openCatalog(c) },

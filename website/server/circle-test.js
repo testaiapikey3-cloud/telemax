@@ -109,7 +109,24 @@ function client() {
   const got2 = await a.waitFor('chat_message', m => m.from === B && m.clientId === 'cc2').catch(() => null);
   check('обычное видео: circle = false', !!(got2 && got2.circle === false));
 
-  console.log('\n=== 4. Сервер жив ===');
+  console.log('\n=== 4. Отдача файлов: Content-Length и Range ===');
+  const buf = Buffer.from('0123456789abcdef');
+  const upRes = await fetch(BASE + '/upload?user=' + A + '&name=rangetest.bin', { method: 'POST', body: buf });
+  const upj = await upRes.json();
+  check('загрузка тестового файла', !!(upj && upj.ok));
+  const g1 = await fetch(BASE + upj.url);
+  check('GET отдаёт Content-Length', g1.headers.get('content-length') === '16');
+  check('Accept-Ranges: bytes', g1.headers.get('accept-ranges') === 'bytes');
+  const g2 = await fetch(BASE + upj.url, { headers: { Range: 'bytes=0-3' } });
+  check('Range → 206 Partial Content', g2.status === 206);
+  check('Content-Range верный', g2.headers.get('content-range') === 'bytes 0-3/16');
+  check('частичные данные верные', Buffer.from(await g2.arrayBuffer()).toString() === '0123');
+  const g3 = await fetch(BASE + upj.url, { headers: { Range: 'bytes=99-' } });
+  check('некорректный Range → 416', g3.status === 416);
+  const g4 = await fetch(BASE + upj.url, { headers: { Range: 'bytes=8-' } });
+  check('Range до конца файла', g4.status === 206 && Buffer.from(await g4.arrayBuffer()).toString() === '89abcdef');
+
+  console.log('\n=== 5. Сервер жив ===');
   const p = await client();
   p.send({ type: 'ping' });
   check('ping/pong', !!(await p.wait('pong').catch(() => null)));

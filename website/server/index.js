@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.2.4-web';
+const VERSION = '1.2.5-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -377,7 +377,7 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
-  if (req.method === 'GET' && u.pathname.startsWith('/uploads/')) {
+  if ((req.method === 'GET' || req.method === 'HEAD') && u.pathname.startsWith('/uploads/')) {
     let name;
     try { name = path.basename(decodeURIComponent(u.pathname.split('/').pop())); } catch (_) {
       res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -388,7 +388,30 @@ const httpServer = http.createServer((req, res) => {
     if (!st || !st.isFile()) { res.writeHead(404); return res.end('Not found'); }
     const file = path.join(UPLOAD_DIR, name);
     const ext = path.extname(name).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    const size = st.size;
+    const head = {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=86400'
+    };
+    /* Range-запросы: без них многие браузеры (особенно мобильные/Safari) не проигрывают видео */
+    const rm = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || '').trim());
+    if (rm && (rm[1] || rm[2]) && size > 0) {
+      let start = rm[1] ? parseInt(rm[1], 10) : Math.max(0, size - parseInt(rm[2], 10));
+      let end = (rm[1] && rm[2]) ? parseInt(rm[2], 10) : size - 1;
+      if (isNaN(start) || isNaN(end) || start > end || start >= size) {
+        res.writeHead(416, { 'Content-Range': 'bytes */' + size });
+        return res.end();
+      }
+      if (end > size - 1) end = size - 1;
+      res.writeHead(206, Object.assign({ 'Content-Range': 'bytes ' + start + '-' + end + '/' + size, 'Content-Length': end - start + 1 }, head));
+      if (req.method === 'HEAD') return res.end();
+      const rs = fs.createReadStream(file, { start, end });
+      rs.on('error', () => { try { res.destroy(); } catch (_) {} });
+      return rs.pipe(res);
+    }
+    res.writeHead(200, Object.assign({ 'Content-Length': size }, head));
+    if (req.method === 'HEAD') return res.end();
     const rs = fs.createReadStream(file);
     rs.on('error', () => { try { res.destroy(); } catch (_) {} });
     return rs.pipe(res);
