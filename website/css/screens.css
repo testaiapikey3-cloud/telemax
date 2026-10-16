@@ -165,6 +165,20 @@
 .ct-user:hover { background: var(--surface); }
 .on-label { font-size: 12px; color: var(--green); }
 
+/* ================= Глобальный поиск: строки-результаты ================= */
+.g-row { display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 16px; cursor: pointer; transition: background .15s; }
+.g-row:hover { background: var(--surface); }
+.join-btn { flex: 0 0 auto; border: none; border-radius: 14px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; background: var(--accent); color: #000; font-family: inherit; }
+.join-btn.open { background: var(--surface2); color: var(--white); }
+
+/* ================= Превью канала («Вступить») ================= */
+#stack .screen.chan-screen { overflow-y: auto; }
+.chan-box { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 34px 24px 10px; gap: 10px; }
+.chan-name { font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.chan-sub { color: var(--gray); font-size: 13.5px; }
+.chan-hint { color: var(--gray-light); font-size: 13.5px; margin-top: 16px; max-width: 320px; line-height: 1.45; }
+.chan-foot { margin-top: auto; padding: 16px 18px 24px; }
+
 /* ================= Звонки ================= */
 .cl-list { padding: 4px 8px 16px; }
 .cl-row { display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 14px; cursor: pointer; }

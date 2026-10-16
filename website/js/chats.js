@@ -15,6 +15,10 @@ TM.chats = (function () {
   let query = '';
   let host = null;
   let openNextOwn = false; // открыть чат сразу после создания своей группы
+  let gRes = null;         // последний ответ глобального поиска (каналы/люди/боты)
+  let gQ = '';             // запрос, для которого пришёл ответ
+  let gTimer = null;
+  let chanPrev = null;     // экран-превью канала («Вступить»)
 
   /* ---------- превью последнего сообщения ---------- */
   function preview(chat) {
@@ -76,14 +80,131 @@ TM.chats = (function () {
       const q = query.toLowerCase();
       items = items.filter(c => (c.name || '').toLowerCase().includes(q) || (c.username || '').toLowerCase().includes(q) || (c.text || '').toLowerCase().includes(q));
     }
-    if (!items.length) {
+    items.forEach(c => list.appendChild(chatRow(c)));
+    const gsearch = normQ(query).length >= 2;
+    if (gsearch) {
+      requestGlobal(query);
+      const g = (gRes && gQ === normQ(query)) ? gRes : null;
+      if (g) appendGlobal(list, g);
+      const anyGlobal = g && ((g.users || []).length || (g.channels || []).length || (g.bots || []).length || virtualBots(query).length);
+      if (!items.length && !anyGlobal) list.innerHTML = '<div class="empty small"><div>' + (g ? 'Ничего не найдено' : 'Ищем везде…') + '</div></div>';
+    } else if (!items.length) {
       list.innerHTML = '<div class="empty"><div class="empty-ic">' + ui.icon('chats') + '</div><div>Чатов пока нет</div><div class="dim">Нажмите + и найдите пользователя по @username</div></div>';
     }
-    items.forEach(c => list.appendChild(chatRow(c)));
     host.appendChild(list);
 
     head.querySelector('#ch-q').addEventListener('input', U.debounce(e => { query = e.target.value; render(); }, 200));
     head.querySelector('#ch-new').onclick = newChatSheet;
+  }
+
+  /* ---------- глобальный поиск: каналы, люди, боты (группы — только по приглашению) ---------- */
+  function normQ(q) { return String(q || '').trim().toLowerCase(); }
+  function requestGlobal(q) {
+    const qq = normQ(q);
+    if (qq.length < 2 || qq === gQ) return;
+    clearTimeout(gTimer);
+    gTimer = setTimeout(() => {
+      if (!TM.net.isOn()) return;
+      gQ = qq;
+      TM.net.send({ type: 'search_global', q: qq });
+    }, 250);
+  }
+
+  function virtualBots(q) {
+    const out = [];
+    const names = TM.config.BOT_USERNAMES || {};
+    Object.keys(names).forEach(un => {
+      if (un.toLowerCase().includes(q) || String(names[un] || '').toLowerCase().includes(q)) out.push({ user: un, name: names[un], verified: !!(TM.config.VERIFIED_BOTS || {})[un] });
+    });
+    return out;
+  }
+
+  function appendGlobal(list, g) {
+    const q = normQ(query);
+    const chans = g.channels || [];
+    if (chans.length) {
+      list.appendChild(U.el('div', 'scr-sub', 'Каналы'));
+      chans.forEach(ch => {
+        const joined = !!ch.joined || !!S.s.groups[ch.id];
+        const row = U.el('div', 'g-row');
+        row.innerHTML =
+          ui.avatarHTML(ch.name, '', false, 'md') +
+          '<div class="cr-main">' +
+            '<div class="cr-top"><span class="cr-name">' + U.esc(ch.name) + '</span>' + ui.verifiedBadge(ch) + '</div>' +
+            '<div class="cr-bottom"><span class="cr-preview">' + U.esc(String(ch.members || 0)) + ' подписчиков' + (ch.official ? ' · официальный' : '') + '</span></div>' +
+          '</div>' +
+          '<button class="join-btn' + (joined ? ' open' : '') + '">' + (joined ? 'Открыть' : 'Вступить') + '</button>';
+        const act = e => { if (e) e.stopPropagation(); if (joined) TM.chat.open(S.chatIdForGroup(ch.id)); else channelPreview(ch); };
+        row.onclick = act;
+        row.querySelector('.join-btn').onclick = act;
+        list.appendChild(row);
+      });
+    }
+    const users = g.users || [];
+    if (users.length) {
+      list.appendChild(U.el('div', 'scr-sub', 'Люди'));
+      users.forEach(u => {
+        const row = U.el('div', 'g-row');
+        row.innerHTML =
+          ui.avatarHTML(u.name || u.user, u.avatar, u.online || S.isOnline(u.user), 'md') +
+          '<div class="cr-main">' +
+            '<div class="cr-top"><span class="cr-name">' + U.esc(u.name || ('@' + u.user)) + '</span>' + ui.verifiedBadge(u.user) + '</div>' +
+            '<div class="cr-bottom"><span class="cr-preview">@' + U.esc(u.user) + (u.premium ? ' • Premium' : '') + '</span>' + (u.online ? '<span class="on-label">в сети</span>' : '') + '</div>' +
+          '</div>';
+        row.onclick = () => ui.sheet({
+          title: u.name || ('@' + u.user),
+          items: [
+            { icon: 'chats', label: 'Написать сообщение', onClick: () => TM.chats.openPrivate(u.user, u.name) },
+            { icon: 'user', label: 'Открыть профиль', onClick: () => TM.profile.open(u.user) },
+            { icon: 'calls', label: 'Позвонить', onClick: () => TM.calls.start({ id: S.chatIdForUser(u.user), username: u.user, name: u.name, kind: 'private' }, false) },
+            { icon: 'wallet', label: 'Отправить TeleCoin', onClick: () => TM.wallet.sendCoins(u.user) }
+          ]
+        });
+        list.appendChild(row);
+      });
+    }
+    const seen = Object.create(null);
+    const bots = [];
+    (g.bots || []).forEach(b => { if (!seen[b.user]) { seen[b.user] = 1; bots.push({ user: b.user, name: b.name, verified: !!b.verified }); } });
+    virtualBots(q).forEach(b => { if (!seen[b.user]) { seen[b.user] = 1; bots.push(b); } });
+    if (bots.length) {
+      list.appendChild(U.el('div', 'scr-sub', 'Боты'));
+      bots.forEach(b => {
+        const row = U.el('div', 'g-row');
+        row.innerHTML =
+          ui.avatarHTML(b.name, '', false, 'md') +
+          '<div class="cr-main">' +
+            '<div class="cr-top"><span class="cr-name">' + U.esc(b.name) + '</span>' + ui.verifiedBadge(b.user) + '<span class="cr-kind">бот</span></div>' +
+            '<div class="cr-bottom"><span class="cr-preview">@' + U.esc(b.user) + '</span></div>' +
+          '</div>';
+        row.onclick = () => TM.bots.openBot(b.user);
+        list.appendChild(row);
+      });
+    }
+  }
+
+  /* превью канала: «Вступить» / «Открыть» (как в MAX) */
+  function channelPreview(ch) {
+    const joined = !!ch.joined || !!S.s.groups[ch.id];
+    chanPrev = ui.pushScreen((node, handle) => {
+      node.classList.add('chan-screen');
+      node.innerHTML =
+        '<div class="scr-head"><button class="icon-btn" id="cv-back">' + ui.icon('back') + '</button><div class="scr-title">Канал</div></div>' +
+        '<div class="chan-box">' +
+          ui.avatarHTML(ch.name, '', false, 'xl') +
+          '<div class="chan-name">' + U.esc(ch.name) + ui.verifiedBadge(ch) + '</div>' +
+          '<div class="chan-sub">' + (ch.official ? 'Официальный канал' : 'Канал') + ' · ' + U.esc(String(ch.members || 0)) + ' подписчиков</div>' +
+          '<div class="chan-hint">' + (joined ? 'Вы подписаны на этот канал' : 'Вступите в канал, чтобы читать публикации') + '</div>' +
+        '</div>' +
+        '<div class="chan-foot"><button class="btn btn-primary btn-big" id="cv-go">' + (joined ? 'Открыть' : 'Вступить') + '</button></div>';
+      node.querySelector('#cv-back').onclick = () => handle.close();
+      node.querySelector('#cv-go').onclick = () => {
+        if (joined) { handle.close(); TM.chat.open(S.chatIdForGroup(ch.id)); return; }
+        if (!TM.net.isOn()) return ui.toast('Нужно подключение к серверу', 'warn');
+        TM.net.send({ type: 'group_join', id: ch.id });
+        ui.toast('Подписываемся…');
+      };
+    });
   }
 
   function isBotChat(c) {
@@ -323,6 +444,20 @@ TM.chats = (function () {
       render();
     });
     TM.net.on('group_created', m => { addGroup(m.group); });
+    TM.net.on('search_global_result', m => {
+      if (!S.s.user) return;
+      if (String(m.q || '') !== normQ(query)) return;
+      gRes = m;
+      if (TM.app.tab === 'chats') render();
+    });
+    TM.net.on('group_joined', m => {
+      if (!S.s.user || !m.group) return;
+      addGroup(m.group);
+      if (chanPrev) { try { chanPrev.close(); } catch (_) {} chanPrev = null; }
+      gRes = null; gQ = '';
+      ui.toast(m.already ? ('Вы уже подписаны на «' + m.group.name + '»') : ('Вы вступили в канал «' + m.group.name + '»'));
+      TM.chat.open(S.chatIdForGroup(m.group.id));
+    });
     TM.net.on('groups_snapshot', m => {
       if (!S.s.user) return;
       (m.items || []).forEach(g => { try { addGroup(g); } catch (_) {} });

@@ -18,7 +18,9 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.2.6-web';
+/* официальные боты (для глобального поиска) */
+const BOT_ACCOUNTS = ['telemaxbot', 'botrast', 'telemany', 'telemaxai'];
+const VERSION = '1.2.7-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -822,6 +824,37 @@ wss.on('connection', (ws, req) => {
         save();
       }
       return;
+    }
+    if (type === 'group_join') {
+      const g = state.groups[String(m.id || '')];
+      if (!g) return send(ws, { type: 'error', message: 'Канал не найден' });
+      if (g.type !== 'channel') return send(ws, { type: 'error', message: 'Вступить можно только в канал (в группы — по приглашению)' });
+      const already = g.members.includes(user);
+      if (!already) {
+        g.members.push(user); dirty = true; save();
+        broadcastAll({ type: 'group_update', group: g });
+      }
+      return send(ws, { type: 'group_joined', group: g, already });
+    }
+    if (type === 'search_global') {
+      const q = String(m.q || '').trim().toLowerCase().slice(0, 64);
+      if (!q) return send(ws, { type: 'search_global_result', q: '', users: [], bots: [], channels: [] });
+      const users = [], bots = [];
+      for (const [un, a] of Object.entries(state.accounts)) {
+        if (un === user || a.banned) continue;
+        if (!un.includes(q) && !String(a.name || '').toLowerCase().includes(q)) continue;
+        const row = { user: un, name: a.name || ('@' + un), avatar: a.avatar || '', verified: !!(a.verified || LEVEL5.includes(un)), premium: !!a.premium, online: !!(state.presence[un] && state.presence[un].online) };
+        if (BOT_ACCOUNTS.includes(un)) bots.push(row); else users.push(row);
+      }
+      users.sort((x, y) => (y.online ? 1 : 0) - (x.online ? 1 : 0) || x.user.localeCompare(y.user));
+      const channels = [];
+      for (const g of Object.values(state.groups)) {
+        if (g.type !== 'channel') continue; /* группы в глобальный поиск не попадают */
+        if (!String(g.name || '').toLowerCase().includes(q) && !String(g.id).includes(q)) continue;
+        channels.push({ id: g.id, name: g.name, kind: 'channel', verified: !!g.verified, official: !!g.official, members: (g.members || []).length, joined: (g.members || []).includes(user) });
+      }
+      channels.sort((x, y) => (y.official ? 1 : 0) - (x.official ? 1 : 0) || (y.members || 0) - (x.members || 0));
+      return send(ws, { type: 'search_global_result', q, users: users.slice(0, 25), bots: bots.slice(0, 8), channels: channels.slice(0, 25) });
     }
     if (type === 'group_verify') {
       const g = state.groups[String(m.id || '')];
