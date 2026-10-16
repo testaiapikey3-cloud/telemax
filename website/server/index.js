@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.2.0-web';
+const VERSION = '1.2.1-web';
 const STARTED = Date.now();
 const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
@@ -188,6 +188,39 @@ function readJsonBody(req, cb) {
   req.on('end', () => { try { cb(JSON.parse(b || '{}')); } catch (_) { cb(null); } });
 }
 
+/* ---------- TeleMAX AI: бесплатный ИИ без ключей и VPN ---------- */
+const AI_URL = 'https://text.pollinations.ai/';
+const AI_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+async function aiHttp(url, timeoutMs) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => { try { ac.abort(); } catch (_) {} }, timeoutMs || 45000);
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': AI_UA }, signal: ac.signal });
+    const t = await r.text();
+    return { status: r.status, ok: r.ok, text: t };
+  } finally { clearTimeout(timer); }
+}
+async function aiAsk(messages) {
+  const sys = ((messages.find(m => m.role === 'system') || {}).content || 'Ты — TeleMAX AI, дружелюбный помощник в мессенджере TeleMAX. Отвечай кратко и по делу простым текстом, без Markdown.').slice(0, 900);
+  const hist = messages.filter(m => m.role !== 'system').slice(-8);
+  const body = hist.length > 1
+    ? 'Ты продолжаешь диалог с пользователем. Выполни его последнюю просьбу или ответь на вопрос по существу, в тему. Пиши только сам ответ, без подписи и без повторного приветствия.\n\n' + hist.map(m => (m.role === 'assistant' ? 'Ассистент' : 'Пользователь') + ': ' + String(m.content).slice(0, 900)).join('\n') + '\nАссистент:'
+    : String((hist[0] || {}).content || '').slice(0, 1500);
+  const url = AI_URL + encodeURIComponent(body) + '?model=openai&system=' + encodeURIComponent(sys);
+  let r = await aiHttp(url, 45000);
+  if (!r.ok || /free limit reached|rate limit/i.test(r.text)) {
+    const m = r.text.match(/wait\s+(\d+)\s+seconds?/i);
+    const waitMs = Math.min(((m ? Number(m[1]) : 30) + 2) * 1000, 36000);
+    await new Promise(rs => setTimeout(rs, waitMs));
+    r = await aiHttp(url, 45000);
+  }
+  if (!r.ok) throw new Error('ИИ недоступен (HTTP ' + r.status + '): ' + String(r.text).slice(0, 120));
+  if (/free limit reached|rate limit/i.test(r.text)) throw new Error('Лимит бесплатного ИИ, попробуйте через минуту');
+  const out = String(r.text).trim().replace(/^(Ассистент|Assistant|AI)\s*:\s*/i, '');
+  if (!out) throw new Error('Пустой ответ ИИ');
+  return out.slice(0, 4000);
+}
+
 function pubAccount(a) {
   if (!a) return null;
   return {
@@ -244,6 +277,47 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
+  /* ---------- TeleMAX AI: бесплатный ИИ-чат (без ключей и VPN) ---------- */
+  if (req.method === 'POST' && u.pathname === '/ai/chat') {
+    readJsonBody(req, async body => {
+      const sendJson = (code, obj) => { try { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); } catch (_) {} };
+      try {
+        const msgs = [];
+        if (body && Array.isArray(body.messages)) {
+          for (const m of body.messages.slice(-12)) {
+            if (!m || typeof m.content !== 'string' || !m.content.trim()) continue;
+            msgs.push({ role: m.role === 'assistant' ? 'assistant' : (m.role === 'system' ? 'system' : 'user'), content: m.content.slice(0, 1200) });
+          }
+        }
+        if (!msgs.length) return sendJson(400, { ok: false, error: 'Пустой запрос' });
+        const text = await aiAsk(msgs);
+        sendJson(200, { ok: true, text });
+      } catch (e) {
+        sendJson(502, { ok: false, error: String((e && e.message) || e) });
+      }
+    });
+    return;
+  }
+
+  /* ---------- перезапуск сервера для деплоя (одноразовый SSH-токен) ---------- */
+  if (req.method === 'POST' && u.pathname === '/admin/restart') {
+    readJsonBody(req, body => {
+      const tokFile = path.join(__dirname, 'restart.token');
+      let tok = '';
+      try {
+        if (!fs.existsSync(tokFile)) fs.writeFileSync(tokFile, crypto.randomBytes(16).toString('hex'), { mode: 0o600 });
+        tok = fs.readFileSync(tokFile, 'utf8').trim();
+      } catch (_) {}
+      const given = String((body && body.token) || req.headers['x-restart-token'] || '');
+      if (!tok || given !== tok) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('forbidden'); }
+      try { fs.unlinkSync(tokFile); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('restarting');
+      setTimeout(() => process.exit(0), 400);
+    });
+    return;
+  }
+
   /* ---------- автоперевод интерфейса: прогрев языка ---------- */
   if (req.method === 'POST' && u.pathname === '/lang/warm') {
     readJsonBody(req, body => {
@@ -289,7 +363,11 @@ const httpServer = http.createServer((req, res) => {
   }
 
   if (req.method === 'GET' && u.pathname.startsWith('/uploads/')) {
-    const name = path.basename(decodeURIComponent(u.pathname.split('/').pop()));
+    let name;
+    try { name = path.basename(decodeURIComponent(u.pathname.split('/').pop())); } catch (_) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Bad request');
+    }
     const file = path.join(UPLOAD_DIR, name);
     if (!fs.existsSync(file)) { res.writeHead(404); return res.end('Not found'); }
     const ext = path.extname(name).toLowerCase();

@@ -12,6 +12,7 @@
 /website/server/telemax-state.json
 /website/server/uploads/
 /website/server/lang-cache/
+/website/server/restart.token
 /website/tools/cloudflared.exe
 /website/tools/tunnel-out.txt
 /website/tools/tunnel-clean.log

@@ -41,7 +41,7 @@ TM.bots = (function () {
     }
     const ai = botChat('telemaxai');
     if (!ai.messages.length) {
-      S.addMessage(ai.id, sysMsg('Привет! Я TeleMAX AI — умный помощник мессенджера 🤖💛\n\nМогу подсказать:\n• как создать группу или канал\n• что делать, если не работают звонки\n• как включить уведомления\n• как сменить язык (120+ языков мира)\n• подарки, TeleCoin, TelePremium, боты\n\nПросто напишите вопрос своими словами — отвечу мгновенно и на выбранном языке. Команда /help — все темы.', 'telemaxai'));
+      S.addMessage(ai.id, sysMsg('Привет! Я TeleMAX AI — умный помощник мессенджера 🤖💛\n\n• Подскажу, как создать группу или канал\n• Помогу, если не работают звонки или уведомления\n• Отвечу на любые вопросы — как настоящий ИИ (ChatGPT)\n\nПросто напишите вопрос своими словами. Команда /help — все темы.', 'telemaxai'));
     }
     TM.chats.render();
   }
@@ -77,10 +77,10 @@ TM.bots = (function () {
     const isBot = /(^|[^а-яёa-z])бот/.test(low);
 
     if (low === '/start' || low === '/help' || has('что умеешь', 'что ты умеешь', 'твои возможности', 'список команд'))
-      return 'Привет! Я TeleMAX AI — помощник внутри мессенджера 💛\n\nОтвечаю на вопросы о TeleMAX:\n• как создать группу или канал\n• что делать, если не работают звонки\n• как включить уведомления\n• как сменить язык (120+ языков)\n• подарки, TeleCoin, TelePremium, боты\n• безопасность и приватность\n\nПросто напишите вопрос своими словами — отвечу сразу.';
+      return 'Привет! Я TeleMAX AI — умный помощник внутри мессенджера 💛\n\nОтвечаю на вопросы о TeleMAX:\n• как создать группу или канал\n• что делать, если не работают звонки\n• как включить уведомления\n• как сменить язык (120+ языков)\n• подарки, TeleCoin, TelePremium, боты\n• безопасность и приватность\n\nИ на любые другие вопросы отвечу как ИИ-ассистент (ChatGPT) — просто напишите. Команда /help — все темы.';
 
     if (has('кто ты', 'ты кто', 'что ты такое', 'ты человек', 'ты робот', 'who are you'))
-      return 'Я TeleMAX AI — цифровой помощник мессенджера TeleMAX 🤖\n\nОтвечаю мгновенно, круглосуточно и на том языке, который выбран в настройках. Задавайте любой вопрос о TeleMAX.';
+      return 'Я TeleMAX AI — цифровой помощник мессенджера TeleMAX 🤖\n\nОтвечаю мгновенно и на том языке, который выбран в настройках. Помогу с функциями TeleMAX и отвечу на любые другие вопросы — как ИИ-ассистент (ChatGPT).';
 
     if (has('спасибо', 'благодар', 'круто', 'супер', 'отлично') && !has('не работа'))
       return 'Всегда рад помочь! 💛 Если появятся ещё вопросы о TeleMAX — пишите, я на связи.';
@@ -163,36 +163,174 @@ TM.bots = (function () {
 
     // приветствие
     if (/^(привет|здравств|хай|добрый|доброе|hi|hello|hey|ку)(\s|$|[!,?.])/.test(low))
-      return 'Привет! 👋 Я TeleMAX AI — помощник мессенджера.\n\nСпросите о чём угодно: группы, каналы, звонки, уведомления, язык, подарки, боты. Или отправьте /help — покажу все темы.';
+      return 'Привет! 👋 Я TeleMAX AI — помощник мессенджера.\n\nСпросите о чём угодно — о TeleMAX (группы, каналы, звонки, уведомления, язык, подарки, боты) или на любую другую тему. Или /help — покажу все темы.';
 
     return ''; // незнакомый вопрос → отвечает внешний AI (если есть интернет)
   }
 
-  async function aiHandle(chat, low, text) {
-    const quick = aiReply(low, text);
-    if (quick) { setTimeout(() => reply(chat, quick), 450); return; }
+  /* ---------- TeleMAX AI: настоящий ИИ-чат (как ChatGPT) ----------
+   * • Частые вопросы о TeleMAX — мгновенные ответы (работают всегда).
+   * • Любые другие вопросы — бесплатный ИИ без ключей и VPN:
+   *   свой сервер → напрямую → авто-повтор при лимите.
+   * • Ответ «печатается» постепенно, диалог помнит контекст. */
+
+  const AI_URL = 'https://text.pollinations.ai/';
+  const AI_Q = {};   // очередь вопросов на чат
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  function withTimeout(p, ms) {
+    return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, ms || 50000); })]);
+  }
+
+  function aiSystem() {
+    const ln = (TM.langs && TM.langs.name && TM.langs.current) ? TM.langs.name(TM.langs.current()) : 'Русском';
+    return 'Ты — TeleMAX AI, умный, дружелюбный и остроумный помощник в мессенджере TeleMAX. Отвечай как лучшие ИИ-ассистенты (ChatGPT): понятно, по делу, тёплым тоном; можно короткие списки через «•». Пиши только простым текстом — без Markdown (никаких звёздочек, решёток и подчёркиваний). Отвечай на языке: ' + ln + '. На вопросы о TeleMAX помогай функциями приложения (группы, каналы, звонки, уведомления, язык, подарки, TeleCoin, Premium, боты, установка); на любые другие темы тоже отвечай. Никогда не говори, что ты другая модель — ты помощник TeleMAX.';
+  }
+
+  function aiHistory(chat) {
+    const out = [{ role: 'system', content: aiSystem() }];
+    const c = S.getChat(chat.id);
+    if (c) {
+      c.messages.slice(-9).forEach(function (m) {
+        const t = String(m.text || '').trim();
+        if (!t || t.length > 1200) return;
+        out.push({ role: m.mine ? 'user' : 'assistant', content: t });
+      });
+    }
+    return out;
+  }
+
+  function aiWaitFrom(text) {
+    const m = String(text || '').match(/wait\s+(\d+)\s+seconds?/i);
+    return m ? (Number(m[1]) + 2) * 1000 : 31000;
+  }
+
+  function aiDirectUrl(messages) {
+    const sys = (messages.find(function (m) { return m.role === 'system'; }) || {}).content || '';
+    const hist = messages.filter(function (m) { return m.role !== 'system'; }).slice(-7);
+    const body = hist.length > 1
+      ? 'Ты продолжаешь диалог с пользователем. Выполни его последнюю просьбу или ответь на вопрос по существу, в тему. Пиши только сам ответ, без подписи и без повторного приветствия.\n\n' + hist.map(function (m) { return (m.role === 'assistant' ? 'Ассистент' : 'Пользователь') + ': ' + String(m.content).slice(0, 700); }).join('\n') + '\nАссистент:'
+      : String((hist[0] || {}).content || '').slice(0, 1400);
+    return AI_URL + encodeURIComponent(body) + '?model=openai&system=' + encodeURIComponent(sys.slice(0, 900));
+  }
+
+  async function aiAskDirect(messages) {
+    const r = await withTimeout(fetch(aiDirectUrl(messages)), 50000);
+    const t = String(await r.text()).trim();
+    if (!r.ok || /free limit reached|rate limit/i.test(t)) return { err: t || ('HTTP ' + r.status) };
+    const out = t.replace(/^(Ассистент|Assistant|AI)\s*:\s*/i, '').trim();
+    return out ? { text: out.slice(0, 4000) } : { err: 'Пустой ответ' };
+  }
+
+  async function aiAskServer(messages) {
+    const base = (TM.net && TM.net.httpBase) ? TM.net.httpBase() : '';
+    const r = await withTimeout(fetch(base + '/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: messages.slice(-9) })
+    }), 60000);
+    let j = null;
+    try { j = await r.json(); } catch (_) {}
+    if (r.ok && j && j.ok && j.text) return { text: String(j.text).slice(0, 4000) };
+    return { err: (j && j.error) || ('HTTP ' + r.status) };
+  }
+
+  async function aiAsk(messages) {
+    let d = null, s = null;
+    try { d = await aiAskDirect(messages); } catch (_) {}
+    if (d && d.text) return d.text;
+    try { s = await aiAskServer(messages); } catch (_) {}
+    if (s && s.text) return s.text;
+    /* бесплатный ИИ временно на лимите — подождём и повторим ещё раз */
+    await sleep(Math.min(aiWaitFrom((d && d.err) || (s && s.err)), 36000));
+    try { d = await aiAskDirect(messages); } catch (_) { d = null; }
+    if (d && d.text) return d.text;
+    try { s = await aiAskServer(messages); } catch (_) { s = null; }
+    return (s && s.text) || '';
+  }
+
+  function isLite() {
+    const c = ' ' + String(document.documentElement.className || '') + ' ';
+    return c.indexOf(' lite ') >= 0;
+  }
+
+  /* ответ печатается постепенно — как в ChatGPT */
+  function typeOut(chat, text) {
+    const full = String(text || '');
+    const msg = sysMsg(full, chat.username);
+    S.addMessage(chat.id, msg);            // в хранилище сразу полный текст
+    const open = function () { if (S.s.activeChat === chat.id) TM.chat.refreshIfOpen(chat.id); TM.chats.render(); };
+    if (isLite() || full.length < 30) { msg.text = full; S.save(); open(); return; }
+    msg.text = '';
+    let i = 0;
+    const step = Math.max(2, Math.ceil(full.length / 60));
+    const t = setInterval(function () {
+      i += step;
+      if (i >= full.length) {
+        clearInterval(t);
+        msg.text = full;
+        S.save(); TM.chats.render();
+        if (S.s.activeChat === chat.id) TM.chat.refreshIfOpen(chat.id);
+        return;
+      }
+      msg.text = full.slice(0, i);
+      if (S.s.activeChat === chat.id) TM.chat.refreshIfOpen(chat.id);
+    }, 45);
+  }
+
+  function aiHandle(chat, low, text) {
+    const q = AI_Q[chat.id] || (AI_Q[chat.id] = { list: [], busy: false });
+    q.list.push({ low: low, text: text });
+    aiPump(chat);
+  }
+
+  async function aiPump(chat) {
+    const q = AI_Q[chat.id];
+    if (!q || q.busy) return;
+    q.busy = true;
+    try {
+      while (q.list.length) await aiAnswer(chat, q.list.shift());
+    } finally {
+      q.busy = false;
+      if (!q.list.length) delete AI_Q[chat.id];
+    }
+  }
+
+  async function aiAnswer(chat, item) {
+    const low = item.low;
+    const forceAI = low.indexOf('/ai ') === 0;
+    const quick = forceAI ? '' : aiReply(low, item.text);
+
+    /* «печатает…» пока думаем (в т.ч. во время ожидания лимита ИИ) */
+    const typingTimer = setInterval(function () {
+      S.s.typing[chat.username] = Date.now();
+      if (S.s.activeChat === chat.id) TM.chat.refreshIfOpen(chat.id);
+    }, 2500);
     S.s.typing[chat.username] = Date.now();
     if (S.s.activeChat === chat.id) TM.chat.refreshIfOpen(chat.id);
-    let ans = '';
+
+    let ans = quick || '';
     try {
-      if (navigator.onLine !== false) {
-        const langNow = (window.TM && TM.langs && TM.langs.current()) || 'ru';
-        const prompt = langNow === 'ru'
-          ? 'Ты — TeleMAX AI, дружелюбный помощник мессенджера TeleMAX. Ответь кратко (до 4 предложений) и по делу. Вопрос: '
-          : 'You are TeleMAX AI, a friendly assistant of the TeleMAX messenger. Answer briefly (max 4 sentences) and to the point, in the language of the question or English. Question: ';
-        const url = 'https://text.pollinations.ai/' + encodeURIComponent(prompt + String(text).slice(0, 500)) + '?model=openai';
-        const res = await Promise.race([
-          fetch(url),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 12000))
-        ]);
-        if (res && res.ok) ans = String(await res.text()).trim().slice(0, 900);
+      if (!quick && navigator.onLine !== false) {
+        const messages = aiHistory(chat);
+        if (forceAI) {
+          const last = messages[messages.length - 1];
+          if (last) last.content = String(item.text).replace(/^\/ai\s+/i, '');
+        }
+        ans = await aiAsk(messages);
       }
-    } catch (_) {}
+    } catch (_) { ans = ''; }
+    clearInterval(typingTimer);
     delete S.s.typing[chat.username];
+    if (S.s.activeChat === chat.id) TM.chat.refreshIfOpen(chat.id);
+
     if (!ans || ans.length < 2) {
-      ans = 'Я TeleMAX AI. Не уверен, что понял вопрос — попробуйте переформулировать.\n\nЧастые темы: группы и каналы, звонки, уведомления, язык интерфейса, подарки и TeleCoin, боты.\n\nКоманда /help — все возможности.';
+      ans = 'Я TeleMAX AI. Не получилось связаться с ИИ — проверьте интернет и напишите ещё раз через минуту.\n\nА пока помогу по темам TeleMAX: группы и каналы, звонки, уведомления, язык интерфейса, подарки и TeleCoin, боты. Команда /help.';
+    } else if (quick) {
+      await sleep(350);
     }
-    reply(chat, ans);
+    typeOut(chat, ans);
   }
 
   function botReply(user, low, text) {
