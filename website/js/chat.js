@@ -516,7 +516,8 @@ TM.chat = (function () {
       }
     });
     TM.net.on('broadcast', m => {
-      ui.toast('📢 ' + (m.text || ''), 'info');
+      const text = m.text || '';
+      notifyIncoming('📢 TeleMAX', text, { kind: 'chat', chat: S.chatIdForUser('telemaxbot'), toast: '📢 ' + text });
       const c = S.getChat(S.chatIdForUser('telemaxbot')) || S.createChat({ id: S.chatIdForUser('telemaxbot'), kind: 'private', username: 'telemaxbot', name: 'TeleMAX Bot' });
       S.addMessage(c.id, { id: U.uid(), type: 'text', text: '📢 Рассылка TeleMAX\n\n' + (m.text || ''), mine: false, from: 'telemaxbot', time: Date.now() });
       TM.chats.render();
@@ -528,6 +529,17 @@ TM.chat = (function () {
   }
 
   /* ---------- входящее сообщение ---------- */
+  function notifyIncoming(title, body, data) {
+    if (data && data.toast && document.visibilityState === 'visible') { ui.toast(data.toast, 'info'); return; }
+    if (document.visibilityState === 'visible') { ui.toast((title || '') + ': ' + (body || ''), 'info'); return; }
+    TM.notify.incomingMessage({
+      title: title || 'TeleMAX',
+      body: body || '',
+      tag: 'tm-' + ((data && data.chat) || 'msg'),
+      data: data ? { kind: data.kind || 'chat', chat: data.chat || '', user: data.user || '' } : {}
+    });
+  }
+
   function receiveMessage(m, silent) {
     if (!S.s.user) return false;
     if (String(m.to || '').startsWith('g:')) {
@@ -539,9 +551,9 @@ TM.chat = (function () {
       const msg = toLocal(m, m.from === S.s.user);
       S.addMessage(c.id, msg);
       if (!silent) {
-        if (cur !== c.id) {
+        if (!msg.mine && cur !== c.id) {
           c.unread = (c.unread || 0) + 1;
-          if (S.store().settings.notifications && !c.muted) ui.toast(c.name + ': ' + TM.chats.preview(c), 'info');
+          if (S.store().settings.notifications && !c.muted) notifyIncoming(c.name, TM.chats.preview(c), { kind: 'chat', chat: c.id, user: m.from });
         }
         S.save();
         if (cur === c.id) renderMessages();
@@ -561,7 +573,7 @@ TM.chat = (function () {
     if (msg.mine) msg.status = 'delivered';
     else if (!silent && cur !== c.id) {
       c.unread = (c.unread || 0) + 1;
-      if (S.store().settings.notifications && !c.muted) ui.toast((c.name || peer) + ': ' + TM.chats.preview(c), 'info');
+      if (S.store().settings.notifications && !c.muted) notifyIncoming(c.name || peer, TM.chats.preview(c), { kind: 'chat', chat: c.id, user: peer });
     }
     if (!silent) {
       S.save();

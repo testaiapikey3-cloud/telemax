@@ -102,6 +102,7 @@ TM.app = (function () {
     TM.cloud.bindNet();
     TM.admin.bindNet();
     TM.settings.bindNet();
+    TM.notify.bind();
 
     // глобальные события
     document.addEventListener('keydown', e => {

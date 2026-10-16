@@ -11,13 +11,15 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const WebSocket = require('ws');
+const push = require('./push');
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || process.env.IP || '0.0.0.0';
 const ADMIN_KEY = process.env.TMX_ADMIN_KEY || 'testtestest654';
 const LEVEL5 = ['mislit_tech', 'i_11_bot'];
-const VERSION = '1.0.0-web';
+const VERSION = '1.1.0-web';
 const STARTED = Date.now();
+const PUSH_SUBJECT = process.env.TMX_PUSH_SUBJECT || 'mailto:telemax@alwaysdata.net';
 
 const ROOT = path.join(__dirname, '..');               // корень сайта (статика)
 const DATA_FILE = process.env.TMX_STATE || path.join(__dirname, 'telemax-state.json');
@@ -34,7 +36,10 @@ const state = {
   history: {},     // user -> [chat_message] последние (подгрузка на другие устройства)
   reports: [],     // жалобы
   broadcast: { text: '', time: 0 },
-  supportCodes: {} // code -> {user, exp}
+  supportCodes: {},// code -> {user, exp}
+  pushSubs: {},    // user -> [{endpoint, keys:{p256dh,auth}, time, ua}] — Web Push подписки
+  pendingCalls: {},// callee -> {from, video, callId, exp} — вызов офлайн-пользователю
+  vapid: null      // VAPID-ключи для push (генерируются при первом запуске)
 };
 try {
   const d = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -44,6 +49,12 @@ try {
 let dirty = false;
 function save() { try { fs.writeFileSync(DATA_FILE, JSON.stringify(state)); dirty = false; } catch (e) { console.error('save:', e.message); } }
 setInterval(() => { if (dirty) save(); }, 1500);
+
+/* VAPID-ключи: создаются один раз и сохраняются в state-файле */
+if (!state.vapid || !state.vapid.publicKey || !state.vapid.privateKey) {
+  state.vapid = push.generateVapidKeys();
+  save();
+}
 
 /* ------------------------------ утилиты ------------------------------ */
 const clean = v => String(v || '').replace(/^@/, '').trim().toLowerCase();
@@ -59,6 +70,82 @@ function broadcastAll(obj, except) { let n = 0; for (const set of sockets.values
 function queueFor(u, obj) { const k = clean(u); const q = state.pending[k] || []; q.push(obj); if (q.length > 500) q.splice(0, q.length - 500); state.pending[k] = q; dirty = true; }
 function histAdd(u, obj) { const k = clean(u); if (!k) return; const h = state.history[k] || (state.history[k] = []); h.push(obj); if (h.length > 400) h.splice(0, h.length - 400); dirty = true; }
 function histDel(users, id) { let n = 0; for (const u of users) { const k = clean(u); const h = k && state.history[k]; if (!h) continue; for (let i = h.length - 1; i >= 0; i--) if (String(h[i].id) === String(id)) { h.splice(i, 1); n++; } } if (n) dirty = true; }
+
+/* ------------------------------ push-уведомления ------------------------------ */
+function subsOf(u) { return state.pushSubs[clean(u)] || []; }
+function anyVisible(u) { for (const ws of socketsOf(u)) if (!ws._hidden) return true; return false; }
+function removeSub(user, endpoint) {
+  const k = clean(user);
+  const list = state.pushSubs[k];
+  if (!list) return;
+  const i = list.findIndex(s => s.endpoint === endpoint);
+  if (i >= 0) { list.splice(i, 1); if (!list.length) delete state.pushSubs[k]; dirty = true; }
+}
+function previewOf(m) {
+  const t = String(m.messageType || m.type || 'text');
+  if (t === 'image') return '🖼 Фото';
+  if (t === 'video') return '🎬 Видео';
+  if (t === 'audio') return '🎤 Голосовое сообщение';
+  if (t === 'file') return '📄 ' + (m.fileName || 'Файл');
+  if (t === 'gift') return '🎁 ' + (m.text || 'Подарок');
+  if (t === 'poll') return '📊 Опрос: ' + String((m.poll && m.poll.question) || '').slice(0, 100);
+  const text = String(m.text || '').replace(/\s+/g, ' ').trim();
+  return text.slice(0, 140) || 'Новое сообщение';
+}
+function pushTo(user, payload, opts) {
+  const list = subsOf(user);
+  if (!list.length || !state.vapid) return 0;
+  const options = Object.assign({ subject: PUSH_SUBJECT }, opts || {});
+  let n = 0;
+  for (const sub of list.slice()) {
+    n++;
+    push.sendPush(sub, payload, state.vapid, options)
+      .then(r => {
+        if (r.gone) removeSub(user, sub.endpoint);
+        else if (!r.ok) console.log('push:', user, r.status || '', r.error || '');
+      })
+      .catch(e => console.log('push:', user, e && e.message));
+  }
+  return n;
+}
+function messagePush(fromUser, out, groupName) {
+  const fromAcc = state.accounts[fromUser] || {};
+  const fromName = fromAcc.name || ('@' + fromUser);
+  const isGroup = !!groupName;
+  const chatId = isGroup ? ('g_' + String(out.to).slice(2)) : ('u_' + clean(fromUser));
+  return {
+    title: isGroup ? groupName : fromName,
+    body: isGroup ? (fromName + ': ' + previewOf(out)) : previewOf(out),
+    tag: 'msg-' + chatId,
+    renotify: true,
+    vibrate: [180, 80, 180],
+    data: { kind: 'chat', chat: chatId, user: clean(fromUser), title: fromName }
+  };
+}
+function callPush(fromUser, m) {
+  const fromAcc = state.accounts[fromUser] || {};
+  return {
+    title: m.video ? '📹 Видеозвонок — TeleMAX' : '📞 Входящий звонок — TeleMAX',
+    body: (fromAcc.name || ('@' + fromUser)) + ' звонит вам',
+    tag: 'call-' + clean(fromUser),
+    renotify: true,
+    requireInteraction: true,
+    vibrate: [500, 250, 500, 250, 500, 250, 500],
+    data: { kind: 'call', user: clean(fromUser), title: fromAcc.name || fromUser }
+  };
+}
+setInterval(() => {   // просроченные входящие вызовы (ушли в офлайн) — чистим
+  const t = now();
+  let changed = false;
+  for (const [u, pc] of Object.entries(state.pendingCalls)) if (!pc || pc.exp < t) { delete state.pendingCalls[u]; changed = true; }
+  if (changed) dirty = true;
+}, 5000);
+
+function readJsonBody(req, cb) {
+  let b = '';
+  req.on('data', c => { b += c; if (b.length > 200000) { try { req.destroy(); } catch (_) {} } });
+  req.on('end', () => { try { cb(JSON.parse(b || '{}')); } catch (_) { cb(null); } });
+}
 
 function pubAccount(a) {
   if (!a) return null;
@@ -85,7 +172,46 @@ const httpServer = http.createServer((req, res) => {
 
   if (u.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify({ ok: true, service: 'telemax-web', version: VERSION, online: sockets.size, accounts: Object.keys(state.accounts).length, uptimeSec: Math.floor((now() - STARTED) / 1000) }));
+    return res.end(JSON.stringify({ ok: true, service: 'telemax-web', version: VERSION, online: sockets.size, accounts: Object.keys(state.accounts).length, uptimeSec: Math.floor((now() - STARTED) / 1000), pushSubs: Object.values(state.pushSubs).reduce((s, l) => s + l.length, 0) }));
+  }
+
+  /* ---------- Web Push: публичный ключ VAPID ---------- */
+  if (req.method === 'GET' && u.pathname === '/push/vapid') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ ok: true, key: state.vapid.publicKey }));
+  }
+
+  /* ---------- Web Push: подписка браузера ---------- */
+  if (req.method === 'POST' && u.pathname === '/push/subscribe') {
+    readJsonBody(req, body => {
+      const sendJson = (code, obj) => { try { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); } catch (_) {} };
+      const user = clean(body && body.user);
+      const sub = body && body.subscription;
+      if (!user || !state.accounts[user]) return sendJson(404, { ok: false, error: 'Пользователь не найден' });
+      if (!sub || typeof sub.endpoint !== 'string' || !/^https?:\/\//.test(sub.endpoint) || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
+        return sendJson(400, { ok: false, error: 'Некорректная подписка' });
+      }
+      const list = state.pushSubs[user] || (state.pushSubs[user] = []);
+      const rec = { endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) }, time: now(), ua: String(req.headers['user-agent'] || '').slice(0, 140) };
+      const existing = list.find(x => x.endpoint === sub.endpoint);
+      if (existing) Object.assign(existing, rec);
+      else list.unshift(rec);
+      if (list.length > 10) list.length = 10;
+      dirty = true; save();
+      sendJson(200, { ok: true, count: list.length });
+    });
+    return;
+  }
+
+  /* ---------- Web Push: отписка ---------- */
+  if (req.method === 'POST' && u.pathname === '/push/unsubscribe') {
+    readJsonBody(req, body => {
+      const user = clean(body && body.user);
+      const endpoint = String((body && body.endpoint) || '');
+      if (user && endpoint) { removeSub(user, endpoint); save(); }
+      try { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true })); } catch (_) {}
+    });
+    return;
   }
 
   if (req.method === 'POST' && u.pathname === '/upload') {
@@ -157,6 +283,14 @@ function registerSocket(a, ws, req, newDevice, resumeToken) {
   for (const item of q) send(ws, item);
   if (q.length) { delete state.pending[u]; dirty = true; }
 
+  // звонок, который пытались совершить, пока человек был не в сети (дозвонит при заходе)
+  const pc = state.pendingCalls[u];
+  if (pc) {
+    delete state.pendingCalls[u];
+    dirty = true;
+    if (pc.exp > now()) send(ws, { type: 'call', from: pc.from, video: pc.video, callId: pc.callId, serverTime: now() });
+  }
+
   const hist = state.history[u] || [];
   if (hist.length) send(ws, { type: 'history_snapshot', items: hist.slice(-400) });
 
@@ -213,6 +347,7 @@ function deliverChat(from, to, m) {
       const n = broadcastUser(member, pay);
       histAdd(member, pay);
       if (!n) queueFor(member, pay);
+      if (!anyVisible(member)) pushTo(member, messagePush(from, pay, g.name));
       delivered += n;
     }
     return { delivered: delivered > 0, id: out.id };
@@ -224,6 +359,7 @@ function deliverChat(from, to, m) {
   histAdd(from, out); histAdd(to, out);
   const n = broadcastUser(to, out);
   if (!n) queueFor(to, out);
+  if (!anyVisible(to)) pushTo(to, messagePush(from, out, ''));
   return { delivered: n > 0, id: out.id };
 }
 
@@ -333,6 +469,7 @@ wss.on('connection', (ws, req) => {
         accounts: Object.keys(state.accounts).length,
         todayNew: Object.values(state.accounts).filter(x => (x.registeredAt || 0) >= dayStart.getTime()).length,
         queued: Object.values(state.pending).reduce((s, q) => s + q.length, 0),
+        pushSubs: Object.values(state.pushSubs).reduce((s, l) => s + l.length, 0),
         uptimeSec: Math.floor((now() - STARTED) / 1000),
         version: VERSION
       });
@@ -408,6 +545,8 @@ wss.on('connection', (ws, req) => {
 
     if (type === 'read') { const to = clean(m.peer); if (to && state.accounts[to]) broadcastUser(to, { type: 'read', by: user, chatId: String(m.chatId || ''), upTo: String(m.upTo || '') }); return; }
     if (type === 'typing') { const to = clean(m.to); if (to && state.accounts[to]) broadcastUser(to, { type: 'typing', from: user, chatId: String(m.chatId || ''), on: !!m.on }); return; }
+    // вкладка скрыта/видна — от этого зависит отправка push
+    if (type === 'app_state') { ws._hidden = !!m.hidden; return; }
     if (type === 'delete_message') {
       const to = clean(m.to);
       const delId = String(m.id || '');
@@ -634,6 +773,14 @@ wss.on('connection', (ws, req) => {
         for (const u of Object.keys(state.accounts)) {
           const msg = { type: 'chat_message', id: uid(), from: 'telemaxbot', to: u, messageType: 'text', text: '📢 Рассылка TeleMAX\n\n' + text, serverTime: now() };
           if (!broadcastUser(u, msg)) queueFor(u, msg);
+          if (u !== user && !anyVisible(u)) pushTo(u, {
+            title: '📢 TeleMAX — рассылка',
+            body: text.slice(0, 180),
+            tag: 'msg-broadcast',
+            renotify: true,
+            vibrate: [200, 100, 200],
+            data: { kind: 'chat', chat: 'u_telemaxbot', user: 'telemaxbot', title: 'TeleMAX Bot' }
+          });
         }
         return send(ws, { type: 'admin_ok', action });
       }
@@ -724,6 +871,7 @@ wss.on('connection', (ws, req) => {
         if (LEVEL5.includes(t.user)) return send(ws, { type: 'error', message: 'Встроенный аккаунт нельзя удалить' });
         for (const w of [...socketsOf(t.user)]) w.close();
         delete state.accounts[t.user]; delete state.presence[t.user]; delete state.pending[t.user]; delete state.history[t.user];
+        delete state.pushSubs[t.user]; delete state.pendingCalls[t.user];
         dirty = true; save();
         broadcastAll({ type: 'contact_removed', user: t.user });
         return send(ws, { type: 'admin_ok', action, target });
@@ -737,6 +885,21 @@ wss.on('connection', (ws, req) => {
       if (!to) return send(ws, { type: 'error', message: 'recipient required' });
       const out = { ...m, from: user };
       const delivered = broadcastUser(to, out);
+      if (type === 'call') {
+        if (!delivered) {
+          // человек не в сети: запомним вызов — если он зайдёт в течение 45 секунд, звонок дозвонит
+          state.pendingCalls[to] = { from: user, video: !!m.video, callId: String(m.callId || ''), exp: now() + 45000 };
+          dirty = true;
+        }
+        // скрытая вкладка/офлайн — push со звуком и вибрацией
+        if (!anyVisible(to)) pushTo(to, callPush(user, m), { ttl: 60, urgency: 'high' });
+        return;
+      }
+      if (['accept', 'reject', 'hangup'].includes(type)) {
+        delete state.pendingCalls[to];
+        delete state.pendingCalls[clean(user)];
+        dirty = true;
+      }
       if (!delivered && type !== 'hangup') return send(ws, { type: 'error', message: 'Собеседник не в сети' });
       return;
     }

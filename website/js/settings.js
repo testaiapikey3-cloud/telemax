@@ -44,7 +44,8 @@ TM.settings = (function () {
 
     row('user', 'Аккаунт', 'Имя, @username, о себе', () => TM.profile.openOwn());
     row('lock', 'Конфиденциальность и 2FA', S.store().settings.pinEnabled ? 'PIN включён' : 'PIN и приватность', twoFactor);
-    row('bell', 'Уведомления', S.store().settings.notifications ? 'Включены' : 'Выключены', notificationsSettings);
+    const _ns = notifStatus();
+    row('bell', 'Уведомления', (S.store().settings.notifications ? 'Включены' : 'Выключены') + (_ns.code === 'on' ? ' • push активны' : ''), notificationsSettings);
     row('palette', 'Внешний вид', 'Тема, акцент, анимации', appearance);
     row('globe', 'Язык', langName(S.store().settings.language), languageSettings);
     row('data', 'Данные и память', storageText(), dataSettings);
@@ -132,16 +133,86 @@ TM.settings = (function () {
   }
 
   /* ---------- уведомления ---------- */
-  function notificationsSettings() {
-    const st = S.store().settings;
-    ui.sheet({
-      title: 'Уведомления',
-      items: [
-        { icon: 'bell', label: st.notifications ? 'Выключить уведомления' : 'Включить уведомления', onClick: () => { st.notifications = !st.notifications; S.save(); refresh(); } },
-        { icon: 'info', label: st.messageSounds ? 'Выключить звуки сообщений' : 'Включить звуки сообщений', onClick: () => { st.messageSounds = !st.messageSounds; S.save(); ui.toast('Сохранено'); } },
-        { icon: 'eye', label: st.quietHours ? 'Отключить тихие часы' : 'Включить тихие часы (23:00–08:00)', onClick: () => { st.quietHours = !st.quietHours; S.save(); ui.toast('Сохранено'); } },
-        { icon: 'pin', label: 'Уведомления об упоминаниях', onClick: () => ui.toast('Упоминания включены') }
-      ]
+  function notificationsSettings() { openNotifications(); }
+
+  function notifStatus() {
+    try { return TM.notify.status(); } catch (_) { return { code: 'unsupported', text: 'Недоступно' }; }
+  }
+
+  function openNotifications() {
+    ui.pushScreen((node, handle) => {
+      node.classList.add('sub-screen');
+      node.innerHTML = '<div class="scr-head"><button class="icon-btn" id="n-back">' + ui.icon('back') + '</button><div class="scr-title">Уведомления</div></div>';
+      const list = U.el('div', 'set-list');
+      node.appendChild(list);
+      node.querySelector('#n-back').onclick = () => handle.close();
+
+      const row = (icon, title, sub, fn, cls) => {
+        const r = U.el('div', 'set-row' + (cls ? ' ' + cls : ''));
+        r.innerHTML = '<span class="set-ic">' + ui.icon(icon) + '</span><div class="ct-main"><b>' + title + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>' + (fn ? ui.icon('chevron') : '');
+        if (fn) r.onclick = fn;
+        list.appendChild(r);
+        return r;
+      };
+      const toggleRow = (icon, title, sub, on, fn) => {
+        const r = U.el('div', 'set-row');
+        r.innerHTML = '<span class="set-ic">' + ui.icon(icon) + '</span><div class="ct-main"><b>' + title + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>';
+        const t = U.el('button', 'toggle' + (on ? ' on' : ''));
+        const flip = e => { if (e) e.stopPropagation(); fn(); draw(); };
+        t.onclick = flip;
+        r.appendChild(t);
+        r.onclick = flip;
+        list.appendChild(r);
+        return r;
+      };
+
+      function draw() {
+        list.innerHTML = '';
+        const st = S.store().settings;
+        const ns = notifStatus();
+        const iconFor = ns.code === 'on' ? 'bell' : (ns.code === 'denied' ? 'warn' : 'info');
+        row(iconFor, 'Push-уведомления', ns.text, null);
+        if (ns.code === 'insecure') {
+          row('warn', 'Нужен HTTPS', 'Откройте сайт по адресу https:// (или localhost) — тогда уведомления включатся.', null);
+        } else if (ns.code === 'ios') {
+          row('info', 'Как включить на iPhone', '«Поделиться» → «На экран Домой», откройте TeleMAX с рабочего стола и включите уведомления здесь (нужен iOS 16.4+).', null);
+        }
+        if (ns.code === 'denied') {
+          row('warn', 'Уведомления запрещены', 'Разрешите их в настройках браузера для сайта telemax.alwaysdata.net', null);
+        }
+        if (ns.code === 'ask' || ns.code === 'ready') {
+          row('bell', ns.code === 'ask' ? 'Включить уведомления' : 'Подключить push', 'Разрешение и подписка на уведомления', async () => {
+            const r = await TM.notify.enable();
+            if (r.ok) ui.toast('Push-уведомления включены 🔔');
+            else ui.toast(r.reason || 'Не удалось включить', 'warn');
+            draw();
+          });
+        }
+        if (ns.code === 'on') {
+          row('bell', 'Отправить тестовое уведомление', 'Проверить звук и вибрацию', async () => {
+            const r = await TM.notify.testNotification();
+            if (r.ok) ui.toast('Тестовое уведомление отправлено 🔔');
+            else ui.toast(r.reason || 'Не удалось', 'warn');
+          });
+          row('refresh', 'Обновить подписку push', 'Если уведомления перестали приходить', async () => {
+            const r = await TM.notify.enable();
+            ui.toast(r.ok ? 'Подписка обновлена' : (r.reason || 'Не удалось'), r.ok ? 'info' : 'warn');
+            draw();
+          });
+          row('close', 'Отключить push', 'Уведомления будут приходить только при открытом сайте', async () => {
+            await TM.notify.disable();
+            ui.toast('Push-уведомления отключены');
+            draw();
+          }, 'danger-row');
+        }
+
+        toggleRow('bell', 'Уведомления в приложении', st.notifications ? 'Включены' : 'Выключены', st.notifications, () => { st.notifications = !st.notifications; S.save(); });
+        toggleRow('mic', 'Звук уведомлений', st.messageSounds ? 'Со звуком' : 'Без звука', st.messageSounds !== false, () => { st.messageSounds = st.messageSounds === false; S.save(); });
+        toggleRow('activity', 'Вибрация', st.vibration !== false ? 'Включена' : 'Выключена', st.vibration !== false, () => { st.vibration = st.vibration === false; S.save(); });
+        row('eye', st.quietHours ? 'Тихие часы включены (23:00–08:00)' : 'Тихие часы (23:00–08:00)', 'Ночью — без звука и вибрации', () => { st.quietHours = !st.quietHours; S.save(); ui.toast('Сохранено'); draw(); });
+        list.appendChild(U.el('div', 'dim pad', 'Push-уведомления приходят даже с закрытым сайтом. На iPhone — после «На экран Домой».'));
+      }
+      draw();
     });
   }
 

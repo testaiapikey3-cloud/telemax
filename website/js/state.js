@@ -44,7 +44,8 @@ TM.state = (function () {
         debugMode: false, logging: false,
         aiEndpoint: '', aiApiKey: '', aiModel: 'gpt-4o-mini',
         pinEnabled: false, pinHash: '', autoLock: false,
-        chatSounds: true, messageSounds: true, readReceipts: true
+        chatSounds: true, messageSounds: true, readReceipts: true,
+        vibration: true, pushEnabled: true, pushAsk: 0
       },
       plugins: {},          // p001 -> {installed, enabled}
       transactions: [],     // история TeleCoin

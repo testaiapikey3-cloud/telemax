@@ -22,6 +22,7 @@ TM.calls = (function () {
   let callUI = null;
   let callTimer = null;
   let ringTimer = null;
+  let pendingIncoming = null; // {from, close} — входящий вызов, ждёт ответа
 
   /* ---------- история ---------- */
   function addHistory(peer, name, dir, kind, missed) {
@@ -80,8 +81,10 @@ TM.calls = (function () {
     if (!TM.net.isOn()) { ui.toast('Звонки работают при подключении к серверу', 'err'); return; }
     const peer = chat.username;
     if (!peer) return;
-    if (!S.isOnline(peer)) { ui.toast('Собеседник не в сети', 'warn'); addHistory(peer, chat.name, 'out', video ? 'video' : 'audio', true); return; }
     if (active) return ui.toast('Уже есть активный звонок', 'warn');
+    // Если собеседник не в сети — сервер отправит ему push-уведомление о звонке,
+    // а вызов дозвонит, как только он откроет TeleMAX (в течение 45 секунд).
+    if (!S.isOnline(peer)) ui.toast('Собеседник не в сети — отправили уведомление о звонке', 'info');
 
     active = { peer, name: chat.name || peer, video, callId: U.uid(), started: 0, direction: 'out' };
     openCallUI();
@@ -103,15 +106,25 @@ TM.calls = (function () {
     if (active) { TM.net.send({ type: 'reject', to: m.from }); return; }
     const chat = S.getChat(S.chatIdForUser(m.from));
     const name = (chat && chat.name) || (S.profileOf(m.from) || {}).name || ('@' + m.from);
+    // Рингтон + вибрация + системное уведомление (если вкладка скрыта и push недоступен)
+    TM.notify.incomingCall({
+      user: m.from,
+      title: m.video ? '📹 Видеозвонок TeleMAX' : '📞 Входящий звонок TeleMAX',
+      body: name + ' звонит вам',
+      data: { kind: 'call', user: m.from }
+    });
     const ok = await ui.modal({
       title: m.video ? 'Видеозвонок' : 'Входящий звонок',
       text: 'Вам звонит ' + name,
       dismissable: false,
+      onRender: (box, close) => { pendingIncoming = { from: m.from, close }; },
       actions: [
         { label: 'Принять', primary: true, value: true },
         { label: 'Отклонить', danger: true, value: false }
       ]
     });
+    pendingIncoming = null;
+    TM.notify.stopRing();
     if (!ok || active) { TM.net.send({ type: 'reject', to: m.from }); addHistory(m.from, name, 'in', m.video ? 'video' : 'audio', true); return; }
     active = { peer: m.from, name, video: !!m.video, callId: m.callId || U.uid(), started: 0, direction: 'in' };
     openCallUI();
@@ -237,6 +250,7 @@ TM.calls = (function () {
   function cleanup() {
     clearInterval(callTimer); callTimer = null;
     clearTimeout(ringTimer); ringTimer = null;
+    TM.notify.stopRing();
     if (pc) { try { pc.close(); } catch (_) {} pc = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     if (active && active.started) {
@@ -254,9 +268,39 @@ TM.calls = (function () {
     TM.net.on('offer', m => { if (active && m.from === active.peer) onOffer(m); });
     TM.net.on('answer', m => { if (active && m.from === active.peer) onAnswer(m); });
     TM.net.on('ice', m => { if (active && m.from === active.peer) onIce(m); });
-    TM.net.on('hangup', m => { if (active && m.from === active.peer) { ui.toast('Собеседник завершил звонок'); cleanup(); if (callUI) { callUI.close(); callUI = null; } } });
-    TM.net.on('reject', m => { if (active && m.from === active.peer) { ui.toast('Звонок отклонён'); cleanup(); if (callUI) { callUI.close(); callUI = null; } } });
+    TM.net.on('hangup', m => {
+      if (active && m.from === active.peer) {
+        ui.toast('Собеседник завершил звонок');
+        cleanup();
+        if (callUI) { callUI.close(); callUI = null; }
+        return;
+      }
+      // отменили вызов до ответа — закрываем экран входящего
+      if (pendingIncoming && pendingIncoming.from === m.from) {
+        const pi = pendingIncoming;
+        pendingIncoming = null;
+        TM.notify.stopRing();
+        try { pi.close(); } catch (_) {}
+        ui.toast('Звонок отменён');
+      }
+    });
+    TM.net.on('reject', m => {
+      if (active && m.from === active.peer) {
+        ui.toast('Звонок отклонён');
+        cleanup();
+        if (callUI) { callUI.close(); callUI = null; }
+        return;
+      }
+      if (pendingIncoming && pendingIncoming.from === m.from) {
+        const pi = pendingIncoming;
+        pendingIncoming = null;
+        TM.notify.stopRing();
+        try { pi.close(); } catch (_) {}
+      }
+    });
   }
 
-  return { render, bindNet, start };
+  function isRinging() { return !!pendingIncoming || !!(active && active.direction === 'in' && !active.started); }
+
+  return { render, bindNet, start, isRinging };
 })();
